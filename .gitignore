@@ -1,0 +1,65 @@
+# Root .gitignore for Echo monorepo
+
+# IDE & Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment files (keep .env.example)
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+build/
+dist/
+*.log
+
+# Dependency directories
+node_modules/
+backend/target/
+frontend/.next/
+frontend/out/
+
+# Maven
+backend/target/
+backend/*.class
+backend/*.jar
+backend/*.war
+backend/*.ear
+backend/mvnw
+backend/mvnw.cmd
+backend/.mvn/
+
+# Gradle (if used)
+.gradle/
+build/
+
+# Test reports
+*.html
+*.xml
+*.json
+!package.json
+!tsconfig.json
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Misc
+*.tgz
+.cache/
+.vercel
+.netlify

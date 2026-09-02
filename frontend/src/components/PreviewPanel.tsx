@@ -9,11 +9,11 @@ interface PreviewPanelProps {
 }
 
 const platformIcons: Record<string, React.ComponentType<{ size?: number }>> = {
-  devto: Globe,
-  hashnode: FileText,
-  twitter: Twitter,
-  linkedin: Linkedin,
-  medium: Globe,
+  devto: Globe as React.ComponentType<{ size?: number }>,
+  hashnode: FileText as React.ComponentType<{ size?: number }>,
+  twitter: Twitter as React.ComponentType<{ size?: number }>,
+  linkedin: Linkedin as React.ComponentType<{ size?: number }>,
+  medium: Globe as React.ComponentType<{ size?: number }>,
 };
 
 const platformNames: Record<string, string> = {
@@ -113,7 +113,7 @@ export function PreviewPanel({ previews }: PreviewPanelProps) {
               </div>
             )}
             
-            {activePreview.type === 'CHUNKED' && activePreview.chunks && (
+            {activePreview.type === 'CHUNKED' && activePreview.chunks && activePreview.chunks.length > 0 && (
               <div className="space-y-4">
                 {activePreview.chunks.map((chunk, index) => (
                   <div 
@@ -121,7 +121,7 @@ export function PreviewPanel({ previews }: PreviewPanelProps) {
                     className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800 relative group"
                   >
                     <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-                      Tweet {index + 1} of {activePreview.chunks.length}
+                      Tweet {index + 1} of {activePreview.chunks!.length}
                     </div>
                     <pre className="whitespace-pre-wrap text-sm font-sans">{chunk}</pre>
                     <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">

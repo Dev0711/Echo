@@ -6,7 +6,7 @@ import { postsApi } from '@/lib/api';
 import { Editor } from '@/components/Editor';
 import { PreviewPanel } from '@/components/PreviewPanel';
 import { Plus, Save, Eye, Send, Trash2, Loader2, ExternalLink } from 'lucide-react';
-import type { Post, PostCreateRequest, PublishRequest } from '@/types';
+import type { Post, PostCreateRequest, PublishRequest, PreviewResponse } from '@/types';
 
 export default function DashboardPage() {
   const [isCreating, setIsCreating] = useState(false);
@@ -14,7 +14,7 @@ export default function DashboardPage() {
   const [publishingPlatforms, setPublishingPlatforms] = useState<Set<string>>(new Set());
   const [isPublishing, setIsPublishing] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  const { posts, currentPost, setPosts, addPost, setCurrentPost, setLoading, setError, updatePlatformStatus } = usePostStore();
+  const { posts, currentPost, setPosts, addPost, setCurrentPost, setLoading, setError, updatePlatformStatus, isLoading } = usePostStore();
 
   // Load posts on mount
   useEffect(() => {
@@ -303,10 +303,10 @@ export default function DashboardPage() {
               </button>
               <button
                 onClick={handleCreatePost}
-                disabled={!newPostTitle.trim() || loading}
+                disabled={!newPostTitle.trim() || isLoading}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
-                {loading ? <Loader2 size={18} className="animate-spin" /> : 'Create'}
+                {isLoading ? <Loader2 size={18} className="animate-spin" /> : 'Create'}
               </button>
             </div>
           </div>

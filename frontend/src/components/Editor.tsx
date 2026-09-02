@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { MdEditor, MdPreview, MdPreviewTab } from '@uiw/react-md-editor';
+import MDEditor from '@uiw/react-md-editor';
 import { usePostStore } from '@/lib/store';
 import { postsApi } from '@/lib/api';
 import type { Post, PostAutosaveRequest } from '@/types';
@@ -13,12 +13,24 @@ interface EditorProps {
   onStatusChange: (status: 'DRAFT' | 'READY' | 'PUBLISHED') => void;
 }
 
+import type { ICommand } from '@uiw/react-md-editor';
+
+const editorCommands: ICommand[] = [
+  'undo', 'redo', '|',
+  'bold', 'italic', '|',
+  'heading', '|',
+  'code', 'quote', '|',
+  'unorderedListCommand', 'orderedListCommand', '|',
+  'image', 'link', '|',
+  'table', 'fullscreen'
+] as unknown as ICommand[];
+
 export function Editor({ post, onTitleChange, onStatusChange }: EditorProps) {
   const [markdown, setMarkdown] = useState('');
   const [isDirty, setIsDirty] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAutosavedContentRef = useRef('');
   const { updatePost, updatePlatformStatus } = usePostStore();
 
@@ -104,8 +116,8 @@ export function Editor({ post, onTitleChange, onStatusChange }: EditorProps) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [post, isDirty, triggerAutosave]);
 
-  const handleChange = (value: string, event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setMarkdown(value);
+  const handleChange = (value?: string, _event?: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setMarkdown(value || '');
   };
 
   const formatLastSaved = () => {
@@ -147,29 +159,14 @@ export function Editor({ post, onTitleChange, onStatusChange }: EditorProps) {
       </div>
       
       {/* Editor */}
-      <MdEditor
+      <MDEditor
         value={markdown}
         onChange={handleChange}
-        placeholder="Write your article in Markdown..."
-        preview={<MdPreview />}
-        previewTab={<MdPreviewTab />}
-        commands={{
-          undo: true,
-          redo: true,
-          bold: true,
-          italic: true,
-          header: true,
-          code: true,
-          quote: true,
-          list: true,
-          image: true,
-          link: true,
-          table: true,
-          fullscreen: true,
-        }}
+        commands={editorCommands}
         className="flex-1"
         textareaProps={{
           spellCheck: true,
+          placeholder: "Write your article in Markdown...",
         }}
       />
       

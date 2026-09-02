@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Post, PostStatus, PlatformPublishStatus } from '@/types';
+import type { Post, PostStatus, PlatformStatus } from '@/types';
 
 interface PostState {
   posts: Post[];
@@ -16,7 +16,7 @@ interface PostState {
   setCurrentPost: (post: Post | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
-  updatePlatformStatus: (postId: string, platform: string, status: Partial<PlatformPublishStatus & { url?: string; error?: string }>) => void;
+  updatePlatformStatus: (postId: string, platform: string, statusUpdate: Partial<PlatformStatus>) => void;
 }
 
 export const usePostStore = create<PostState>()(

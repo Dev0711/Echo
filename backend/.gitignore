@@ -1,0 +1,16 @@
+# Backend specific ignores
+target/
+*.class
+*.jar
+*.war
+*.ear
+.mvn/
+mvnw
+mvnw.cmd
+
+# IDE
+.idea/
+*.iml
+
+# Logs
+*.log
