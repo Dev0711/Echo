@@ -1,0 +1,57 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: echo-backend
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/echo}
+      auto-index-creation: true
+  web:
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+      allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
+      allowed-headers: "*"
+
+# Actuator endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+# Logging
+logging:
+  level:
+    com.echo: DEBUG
+    org.springframework.web.reactive.function.client: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# Custom properties
+echo:
+  media:
+    storage:
+      type: ${MEDIA_STORAGE_TYPE:local} # local, r2, b2
+      local-path: ${MEDIA_LOCAL_PATH:./uploads}
+  ai:
+    anthropic:
+      api-key: ${ANTHROPIC_API_KEY:}
+  platforms:
+    devto:
+      api-key: ${DEVTO_API_KEY:}
+    hashnode:
+      access-token: ${HASHNODE_ACCESS_TOKEN:}
+    twitter:
+      api-key: ${TWITTER_API_KEY:}
+      api-secret: ${TWITTER_API_SECRET:}
+      access-token: ${TWITTER_ACCESS_TOKEN:}
+      access-token-secret: ${TWITTER_ACCESS_TOKEN_SECRET:}
+    linkedin:
+      client-id: ${LINKEDIN_CLIENT_ID:}
+      client-secret: ${LINKEDIN_CLIENT_SECRET:}
+      access-token: ${LINKEDIN_ACCESS_TOKEN:}
