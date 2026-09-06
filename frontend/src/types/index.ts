@@ -1,10 +1,11 @@
+// Add credential types to the existing types file
 export type PostStatus = 'DRAFT' | 'READY' | 'PUBLISHED';
 
-export type PlatformPublishStatus = 
-  | 'NOT_STARTED' 
-  | 'PENDING' 
-  | 'PUBLISHED' 
-  | 'FAILED' 
+export type PlatformPublishStatus =
+  | 'NOT_STARTED'
+  | 'PENDING'
+  | 'PUBLISHED'
+  | 'FAILED'
   | 'MANUAL_REQUIRED';
 
 export interface PlatformStatus {
@@ -72,4 +73,25 @@ export interface ApiError {
   message: string;
   timestamp: number;
   errors?: Record<string, string[]>;
+}
+
+export interface UserResponse {
+  id: string;
+  email: string;
+  name: string;
+  picture?: string;
+}
+
+export interface CredentialStatusResponse {
+  platform: string;
+  connected: boolean;
+  connectedAt: string;
+}
+
+export interface SaveCredentialRequest {
+  apiKey?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  clientId?: string;
+  clientSecret?: string;
 }

@@ -40,19 +40,25 @@ public class PostService {
     private final List<PlatformPublisher> publishers;
     private final Parser markdownParser;
     private final PlatformCredentialsProvider credentialsProvider;
+    private final com.echo.repository.PlatformCredentialRepository credentialRepository;
+    private final com.echo.security.EncryptionService encryptionService;
 
     public PostService(PostRepository postRepository,
                        PostVersionRepository postVersionRepository,
                        PostMapper postMapper,
                        List<PlatformFormatter> formatters,
                        List<PlatformPublisher> publishers,
-                       PlatformCredentialsProvider credentialsProvider) {
+                       PlatformCredentialsProvider credentialsProvider,
+                       com.echo.repository.PlatformCredentialRepository credentialRepository,
+                       com.echo.security.EncryptionService encryptionService) {
         this.postRepository = postRepository;
         this.postVersionRepository = postVersionRepository;
         this.postMapper = postMapper;
         this.formatters = formatters;
         this.publishers = publishers;
         this.credentialsProvider = credentialsProvider;
+        this.credentialRepository = credentialRepository;
+        this.encryptionService = encryptionService;
         this.markdownParser = Parser.builder().build();
     }
 
@@ -145,6 +151,14 @@ public class PostService {
                 post.coverImageUrl()
         );
         
+        String userId = null;
+        if (org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication() != null) {
+            Object principal = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+            if (principal instanceof String) {
+                userId = (String) principal;
+            }
+        }
+        
         for (String platformKey : request.platforms()) {
             // Check if already published (idempotency)
             PlatformStatus existingStatus = post.platforms().get(platformKey);
@@ -154,7 +168,25 @@ public class PostService {
                 continue; // Skip already published or pending
             }
             
-            PlatformCredentials creds = credentialsProvider.getCredentials(platformKey, request.credentials());
+            PlatformCredentials creds = null;
+            if (request.credentials() != null && request.credentials().containsKey(platformKey)) {
+                creds = credentialsProvider.getCredentials(platformKey, request.credentials());
+            } else if (userId != null) {
+                var stored = credentialRepository.findByUserIdAndPlatform(userId, platformKey).orElse(null);
+                if (stored != null) {
+                    creds = new PlatformCredentials(
+                        encryptionService.decrypt(stored.encryptedApiKey()),
+                        encryptionService.decrypt(stored.encryptedAccessToken()),
+                        encryptionService.decrypt(stored.encryptedRefreshToken()),
+                        encryptionService.decrypt(stored.encryptedClientId()),
+                        encryptionService.decrypt(stored.encryptedClientSecret())
+                    );
+                }
+            }
+            
+            if (creds == null) {
+                creds = credentialsProvider.getCredentials(platformKey, request.credentials());
+            }
             
             // Publish asynchronously
             publishToPlatformAsync(postId, platformKey, parsedPost, creds);

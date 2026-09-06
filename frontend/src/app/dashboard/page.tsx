@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { auth } from '@/lib/auth';
 import { usePostStore } from '@/lib/store';
 import { postsApi } from '@/lib/api';
 import { Editor } from '@/components/Editor';
@@ -73,7 +74,16 @@ export default function DashboardPage() {
   const [publishResult, setPublishResult] = useState<{success: boolean; message: string} | null>(null);
   const { posts, currentPost, setPosts, addPost, setCurrentPost, setLoading, setError, isLoading } = usePostStore();
 
-  useEffect(() => { loadPosts(); }, []);
+  const user = auth.getUser();
+
+  useEffect(() => {
+    // Client-side auth guard
+    if (!auth.isAuthenticated()) {
+      window.location.href = '/login';
+      return;
+    }
+    loadPosts();
+  }, []);
 
   const loadPosts = async () => {
     setLoading(true);
@@ -176,14 +186,23 @@ export default function DashboardPage() {
         </div>
 
         {/* Footer */}
-        <div className="p-3 border-t border-white/5">
-          <div className="flex items-center gap-3 px-2 py-2 hover:bg-white/5 rounded-xl cursor-pointer transition-colors">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-r from-indigo-400 to-purple-400" />
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-gray-300 truncate">Creator Mode</p>
+        <div className="p-3 border-t border-white/5 space-y-1">
+          <a href="/settings"
+            className="flex items-center gap-3 px-2 py-2 hover:bg-white/5 rounded-xl cursor-pointer transition-colors group">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-r from-indigo-400 to-purple-400 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+              {user?.name?.[0]?.toUpperCase() ?? '?'}
             </div>
-            <Settings size={14} className="text-gray-600" />
-          </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-gray-300 truncate">{user?.name ?? 'My Account'}</p>
+              <p className="text-[10px] text-gray-600 truncate">{user?.email ?? ''}</p>
+            </div>
+            <Settings size={13} className="text-gray-600 group-hover:text-gray-400 transition-colors shrink-0" />
+          </a>
+          <button
+            onClick={() => auth.logout()}
+            className="w-full text-left px-2 py-1.5 text-[11px] text-gray-600 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/5">
+            Sign out
+          </button>
         </div>
       </aside>
 

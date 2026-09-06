@@ -63,3 +63,4 @@ coverage/
 .cache/
 .vercel
 .netlify
+.env.properties
