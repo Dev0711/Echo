@@ -20,7 +20,6 @@ public class PostCreateRequest {
     @Size(max = 200, message = "Title must not exceed 200 characters")
     private String title;
 
-    @NotBlank(message = "Body markdown is required")
     private String bodyMarkdown;
 
     @Size(max = 10, message = "Maximum 10 tags allowed")

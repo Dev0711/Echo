@@ -25,16 +25,3 @@ public record Post(
         DRAFT, READY, PUBLISHED
     }
 }
-
-record PlatformStatus(
-        PlatformPublishStatus status,
-        String url,
-        String platformId,
-        LocalDateTime publishedAt,
-        String error,
-        List<String> threadIds
-) {
-    public enum PlatformPublishStatus {
-        NOT_STARTED, PENDING, PUBLISHED, FAILED, MANUAL_REQUIRED
-    }
-}

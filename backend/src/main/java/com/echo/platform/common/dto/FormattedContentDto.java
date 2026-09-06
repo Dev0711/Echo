@@ -12,16 +12,4 @@ import lombok.Data;
 })
 public abstract class FormattedContentDto {
     private String type;
-}
-
-@Data
-public class SingleBodyContentDto extends FormattedContentDto {
-    private String title;
-    private String body;
-    private java.util.List<String> tags;
-}
-
-@Data
-public class ChunkedContentDto extends FormattedContentDto {
-    private java.util.List<String> chunks;
-}
+}

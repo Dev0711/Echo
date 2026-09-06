@@ -2,82 +2,129 @@
 @tailwind components;
 @tailwind utilities;
 
+/* System font stack — works perfectly offline */
+@layer base {
+  html {
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 
+      'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+  code, kbd, samp, pre {
+    font-family: ui-monospace, 'Cascadia Code', 'Fira Code', 'Consolas', 'Courier New', monospace;
+  }
+}
+
+
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --foreground: 240 10% 3.9%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 240 10% 3.9%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 243 75% 59%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 243 75% 59%;
+    --radius: 0.75rem;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
+    /* Premium Obsidian / Indigo Dark Mode */
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+    --card: 224 71% 4%;
+    --card-foreground: 213 31% 91%;
+    --popover: 224 71% 4%;
+    --popover-foreground: 215 20.2% 65.1%;
+    --primary: 243 75% 59%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 222 47% 11%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
+    --muted: 223 47% 11%;
+    --muted-foreground: 215.4 16.3% 56.9%;
+    --accent: 216 34% 17%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
+    --ring: 243 75% 59%;
   }
 }
 
 @layer base {
   * {
-    @apply border-border;
+    @apply border-border selection:bg-primary/30 selection:text-primary-foreground;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased selection:bg-primary/30 selection:text-primary-foreground;
+    background-image: radial-gradient(circle at 50% 0%, rgba(79, 70, 229, 0.15), transparent 50%),
+                      radial-gradient(circle at 0% 100%, rgba(236, 72, 153, 0.05), transparent 50%);
+    background-attachment: fixed;
   }
 }
 
-/* Markdown editor styles */
+@layer utilities {
+  .glass {
+    @apply bg-white/5 dark:bg-black/20 backdrop-blur-xl border border-white/10 dark:border-white/5;
+  }
+  .glass-card {
+    @apply bg-white/70 dark:bg-gray-900/60 backdrop-blur-lg border border-gray-200/50 dark:border-gray-800/50 shadow-xl;
+  }
+  .glass-panel {
+    @apply bg-white/90 dark:bg-[#0B0F19]/80 backdrop-blur-2xl border border-gray-200/50 dark:border-gray-800/50;
+  }
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 to-purple-500;
+  }
+  .micro-hover {
+    @apply transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0;
+  }
+}
+
+/* Markdown editor styles - Premium adjustments */
 .markdown-body {
-  @apply prose prose-gray dark:prose-invert max-w-none;
+  @apply prose prose-gray dark:prose-invert max-w-none font-sans !bg-transparent;
+}
+
+/* UIW Editor specific overrides for true dark mode */
+.wmde-markdown-var {
+  --color-canvas-default: transparent !important;
+  --color-canvas-subtle: rgba(255, 255, 255, 0.05) !important;
+  --color-border-default: rgba(255, 255, 255, 0.1) !important;
+  --color-border-muted: rgba(255, 255, 255, 0.05) !important;
+}
+
+[data-color-mode="dark"] {
+  --color-canvas-default: transparent !important;
+  --color-canvas-subtle: rgba(0, 0, 0, 0.2) !important;
 }
 
 .markdown-body pre {
-  @apply bg-gray-100 dark:bg-gray-800 rounded-lg p-4 overflow-x-auto;
+  @apply bg-gray-100/50 dark:bg-black/40 rounded-xl p-4 overflow-x-auto border border-gray-200/50 dark:border-gray-800/50 shadow-inner;
 }
 
 .markdown-body code {
-  @apply bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-sm;
+  @apply bg-gray-100 dark:bg-black/40 px-1.5 py-0.5 rounded-md text-sm text-indigo-600 dark:text-indigo-400 font-mono;
 }
 
 .markdown-body pre code {
-  @apply bg-transparent p-0 text-base;
+  @apply bg-transparent p-0 text-base text-gray-800 dark:text-gray-200 shadow-none;
 }
 
-/* Scrollbar styles */
+/* Scrollbar styles - Premium minimalist */
 ::-webkit-scrollbar {
-  @apply w-2 h-2;
+  @apply w-1.5 h-1.5;
 }
 
 ::-webkit-scrollbar-track {
@@ -85,9 +132,9 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 dark:bg-gray-600 rounded-full;
+  @apply bg-gray-300/50 dark:bg-gray-700/50 rounded-full transition-colors;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-400 dark:bg-gray-500;
+  @apply bg-gray-400/80 dark:bg-gray-600/80;
 }

@@ -19,20 +19,18 @@ import com.echo.platform.common.ParsedPost;
 import com.echo.repository.PostRepository;
 import com.echo.repository.PostVersionRepository;
 import com.vladsch.flexmark.parser.Parser;
-import com.vladsch.flexmark.ast.Node;
+import com.vladsch.flexmark.util.ast.Node;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.retry.annotation.Retryable;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.retry.annotation.Backoff;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
-@Transactional
 public class PostService {
 
     private final PostRepository postRepository;
@@ -116,7 +114,7 @@ public class PostService {
 
     public PreviewResponse preview(String postId) {
         Post post = postRepository.findById(postId)
-                .orElseThrow(() -> new ResourceNotFoundException("Post", id));
+                .orElseThrow(() -> new ResourceNotFoundException("Post", postId));
         
         Node ast = markdownParser.parse(post.bodyMarkdown());
         ParsedPost parsedPost = new ParsedPost(
@@ -164,7 +162,7 @@ public class PostService {
     }
 
     @Async
-    @Retryable(maxAttempts = 3, backoff = @org.springframework.retry.annotation.Backoff(delay = 2000, multiplier = 2))
+    @Retryable(maxAttempts = 3, backoff = @Backoff(delay = 2000, multiplier = 2))
     public void publishToPlatformAsync(String postId, String platformKey, ParsedPost parsedPost, PlatformCredentials creds) {
         PlatformFormatter formatter = formatters.stream()
                 .filter(f -> f.platformKey().equals(platformKey))

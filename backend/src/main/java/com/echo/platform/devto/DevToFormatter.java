@@ -4,7 +4,6 @@ import com.echo.platform.common.FormattedContent;
 import com.echo.platform.common.PlatformFormatter;
 import com.echo.platform.common.ParsedPost;
 import com.echo.platform.common.SingleBodyContent;
-import com.vladsch.flexmark.ast.Node;
 import com.vladsch.flexmark.html.HtmlRenderer;
 import org.springframework.stereotype.Component;
 

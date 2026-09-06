@@ -42,7 +42,7 @@ public class DevToPublisher implements PlatformPublisher {
                 """.formatted(
                 escapeJson(single.title()),
                 escapeJson(single.body()),
-                single.tags().toString().replace(' ', "")
+                single.tags().toString().replace(" ", "")
             );
 
             String response = webClient.post()

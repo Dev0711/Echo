@@ -54,7 +54,7 @@ public class HashnodePublisher implements PlatformPublisher {
                 """.formatted(
                 escapeJson(single.title()),
                 escapeJson(single.body()),
-                single.tags().toString().replace(' ', "")
+                single.tags().toString().replace(" ", "")
             );
 
             String requestBody = """

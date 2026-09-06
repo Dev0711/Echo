@@ -1,12 +1,9 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
 
-const inter = Inter({ subsets: ['latin'] });
-
 export const metadata: Metadata = {
-  title: 'Echo - Cross-posting Content Platform',
-  description: 'Write once, publish everywhere',
+  title: 'Echo — Write Once, Publish Everywhere',
+  description: 'The premium workspace for content creators. Publish to X, LinkedIn, Dev.to, and Hashnode simultaneously.',
 };
 
 export default function RootLayout({
@@ -16,7 +13,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <body className={`${inter.className} antialiased`}>{children}</body>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      </head>
+      <body className="antialiased font-sans">{children}</body>
     </html>
   );
 }

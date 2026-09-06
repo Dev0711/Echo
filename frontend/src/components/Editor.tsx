@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import MDEditor from '@uiw/react-md-editor';
+import MDEditor, { commands, ICommand } from '@uiw/react-md-editor';
 import { usePostStore } from '@/lib/store';
 import { postsApi } from '@/lib/api';
 import type { Post, PostAutosaveRequest } from '@/types';
-import { Save, Eye, Globe, AlertCircle, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle, Loader2, Tag, X } from 'lucide-react';
 
 interface EditorProps {
   post: Post | null;
@@ -13,44 +13,56 @@ interface EditorProps {
   onStatusChange: (status: 'DRAFT' | 'READY' | 'PUBLISHED') => void;
 }
 
-import type { ICommand } from '@uiw/react-md-editor';
-
 const editorCommands: ICommand[] = [
-  'undo', 'redo', '|',
-  'bold', 'italic', '|',
-  'heading', '|',
-  'code', 'quote', '|',
-  'unorderedListCommand', 'orderedListCommand', '|',
-  'image', 'link', '|',
-  'table', 'fullscreen'
-] as unknown as ICommand[];
+  commands.bold, commands.italic, commands.strikethrough, commands.divider,
+  commands.title1, commands.title2, commands.title3, commands.divider,
+  commands.codeBlock, commands.quote, commands.divider,
+  commands.unorderedListCommand, commands.orderedListCommand, commands.divider,
+  commands.link, commands.image, commands.divider,
+  commands.fullscreen,
+];
 
 export function Editor({ post, onTitleChange, onStatusChange }: EditorProps) {
   const [markdown, setMarkdown] = useState('');
   const [isDirty, setIsDirty] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [tagInput, setTagInput] = useState('');
+  const [editorHeight, setEditorHeight] = useState(400);
+  const containerRef = useRef<HTMLDivElement>(null);
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAutosavedContentRef = useRef('');
-  const { updatePost, updatePlatformStatus } = usePostStore();
+  const { updatePost } = usePostStore();
 
-  // Initialize markdown from post
+  // Dynamically compute the editor height to fill the container
+  useEffect(() => {
+    const updateHeight = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        // Subtract: title(~80px) + toolbar(~44px) + tags(~52px) + footer(~40px)
+        const available = rect.height - 220;
+        setEditorHeight(Math.max(300, available));
+      }
+    };
+    updateHeight();
+    const ro = new ResizeObserver(updateHeight);
+    if (containerRef.current) ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
   useEffect(() => {
     if (post) {
       setMarkdown(post.bodyMarkdown);
       lastAutosavedContentRef.current = post.bodyMarkdown;
     }
-  }, [post]);
+  }, [post?.id]);
 
-  // Autosave logic: 3-5s debounce or every 30s
   const triggerAutosave = useCallback(() => {
     if (!post || !isDirty) return;
-    
     const request: PostAutosaveRequest = { bodyMarkdown: markdown };
-    
     postsApi.autosave(post.id, request)
-      .then((response) => {
-        updatePost(post.id, { 
+      .then(() => {
+        updatePost(post.id, {
           bodyMarkdown: markdown,
           lastAutosavedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -62,118 +74,120 @@ export function Editor({ post, onTitleChange, onStatusChange }: EditorProps) {
       })
       .catch((error) => {
         setSaveError(error.response?.data?.message || 'Autosave failed');
-        console.error('Autosave error:', error);
       });
   }, [post, markdown, isDirty, updatePost]);
 
-  // Debounced autosave
   useEffect(() => {
     if (!post) return;
-    
     const hasChanged = markdown !== lastAutosavedContentRef.current;
     setIsDirty(hasChanged);
-    
     if (hasChanged) {
-      // Debounce 3-5 seconds
-      if (autosaveTimerRef.current) {
-        clearTimeout(autosaveTimerRef.current);
-      }
-      autosaveTimerRef.current = setTimeout(() => {
-        triggerAutosave();
-      }, 4000);
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = setTimeout(triggerAutosave, 3000);
     }
-    
-    return () => {
-      if (autosaveTimerRef.current) {
-        clearTimeout(autosaveTimerRef.current);
-      }
-    };
+    return () => { if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current); };
   }, [markdown, post, triggerAutosave]);
 
-  // Periodic autosave every 30 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (post && isDirty) {
-        triggerAutosave();
-      }
-    }, 30000);
-    
-    return () => clearInterval(interval);
-  }, [post, isDirty, triggerAutosave]);
-
-  // Manual save (Ctrl+S)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        if (post && isDirty) {
-          triggerAutosave();
-        }
+        if (post && isDirty) triggerAutosave();
       }
     };
-    
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [post, isDirty, triggerAutosave]);
 
-  const handleChange = (value?: string, _event?: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setMarkdown(value || '');
+  const addTag = () => {
+    if (!tagInput.trim() || !post) return;
+    const newTag = tagInput.trim().toLowerCase().replace(/\s+/g, '-');
+    if (!post.tags.includes(newTag)) {
+      updatePost(post.id, { tags: [...post.tags, newTag] });
+    }
+    setTagInput('');
   };
 
-  const formatLastSaved = () => {
-    if (!lastSaved) return 'Never saved';
-    return `Saved ${lastSaved.toLocaleTimeString()}`;
+  const removeTag = (tag: string) => {
+    if (!post) return;
+    updatePost(post.id, { tags: post.tags.filter(t => t !== tag) });
   };
+
+  const wordCount = markdown.split(/\s+/).filter(Boolean).length;
+  const charCount = markdown.length;
 
   return (
-    <div className="flex flex-col h-full border rounded-lg bg-white dark:bg-gray-900">
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 p-2 border-b bg-gray-50 dark:bg-gray-800">
-        <div className="flex-1">
+    <div ref={containerRef} className="flex flex-col h-full glass-panel rounded-2xl overflow-hidden shadow-2xl">
+      {/* Title */}
+      <div className="px-8 pt-8 pb-4 border-b border-white/5">
+        <input
+          type="text"
+          value={post?.title || ''}
+          onChange={(e) => onTitleChange(e.target.value)}
+          placeholder="Untitled masterpiece..."
+          className="w-full bg-transparent text-4xl font-extrabold text-white placeholder:text-gray-700 border-none outline-none focus:ring-0 leading-tight tracking-tight"
+        />
+
+        {/* Tags row */}
+        <div className="flex flex-wrap items-center gap-2 mt-4">
+          <Tag size={14} className="text-gray-500 shrink-0" />
+          {post?.tags.map(tag => (
+            <span key={tag} className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-medium rounded-full">
+              #{tag}
+              <button onClick={() => removeTag(tag)} className="hover:text-white transition-colors">
+                <X size={10} />
+              </button>
+            </span>
+          ))}
           <input
-            type="text"
-            value={post?.title || ''}
-            onChange={(e) => onTitleChange(e.target.value)}
-            placeholder="Post title..."
-            className="w-full px-3 py-2 text-lg font-medium border-none bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
+            value={tagInput}
+            onChange={e => setTagInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(); } }}
+            placeholder="Add tag..."
+            className="bg-transparent text-xs text-gray-400 placeholder:text-gray-600 border-none outline-none w-24 focus:ring-0 focus:w-36 transition-all"
           />
         </div>
+      </div>
+
+      {/* MDEditor — explicit pixel height via ResizeObserver */}
+      <div className="flex-1 min-h-0" data-color-mode="dark">
+        <MDEditor
+          value={markdown}
+          onChange={(val) => setMarkdown(val || '')}
+          commands={editorCommands}
+          height={editorHeight}
+          visibleDragbar={false}
+          previewOptions={{
+            className: 'prose prose-invert max-w-none px-8 py-6',
+          }}
+          textareaProps={{
+            placeholder: 'Start writing... Use the toolbar for rich formatting, or type Markdown directly.',
+            style: { paddingLeft: '2rem', paddingRight: '2rem', paddingTop: '1.5rem', fontSize: '1.05rem', lineHeight: '1.8' },
+            spellCheck: true,
+          }}
+          style={{ background: 'transparent', border: 'none' }}
+        />
+      </div>
+
+      {/* Footer status bar */}
+      <div className="flex items-center justify-between px-8 py-3 border-t border-white/5 text-xs text-gray-500 shrink-0">
+        <div className="flex items-center gap-4">
+          <span>{wordCount} words</span>
+          <span>{charCount} chars</span>
+        </div>
         <div className="flex items-center gap-2">
-          {lastSaved && <span className="text-xs text-gray-500 dark:text-gray-400">{formatLastSaved()}</span>}
-          {saveError && (
-            <span className="text-xs text-red-500 flex items-center gap-1">
-              <AlertCircle size={12} /> {saveError}
+          {saveError ? (
+            <span className="text-red-400 flex items-center gap-1.5"><AlertCircle size={12} /> {saveError}</span>
+          ) : isDirty ? (
+            <span className="text-amber-400 flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> Saving...</span>
+          ) : lastSaved ? (
+            <span className="text-emerald-400 flex items-center gap-1.5">
+              <CheckCircle size={12} /> Saved {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
-          )}
-          {isDirty && !saveError && (
-            <span className="text-xs text-yellow-500 flex items-center gap-1">
-              <Loader2 size={12} className="animate-spin" /> Saving...
-            </span>
-          )}
-          {!isDirty && lastSaved && !saveError && (
-            <span className="text-xs text-green-500 flex items-center gap-1">
-              <CheckCircle size={12} /> Saved
-            </span>
+          ) : (
+            <span>Ctrl+S to save</span>
           )}
         </div>
-      </div>
-      
-      {/* Editor */}
-      <MDEditor
-        value={markdown}
-        onChange={handleChange}
-        commands={editorCommands}
-        className="flex-1"
-        textareaProps={{
-          spellCheck: true,
-          placeholder: "Write your article in Markdown...",
-        }}
-      />
-      
-      {/* Status bar */}
-      <div className="flex items-center justify-between px-3 py-2 border-t bg-gray-50 dark:bg-gray-800 text-xs text-gray-500 dark:text-gray-400">
-        <span>{markdown.split('\n').length} lines • {markdown.length} characters</span>
-        <span>Press Ctrl+S to save</span>
       </div>
     </div>
   );

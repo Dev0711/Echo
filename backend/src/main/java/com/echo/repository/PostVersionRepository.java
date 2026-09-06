@@ -12,6 +12,4 @@ public interface PostVersionRepository extends MongoRepository<PostVersion, Stri
     
     @Query("{ 'postId' : ?0 }")
     List<PostVersion> findAllByPostIdOrderBySavedAtDesc(String postId);
-    
-    void deleteAllById(Iterable<String> ids);
 }

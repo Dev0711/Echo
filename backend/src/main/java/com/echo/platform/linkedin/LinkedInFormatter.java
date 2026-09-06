@@ -4,7 +4,6 @@ import com.echo.platform.common.FormattedContent;
 import com.echo.platform.common.PlatformFormatter;
 import com.echo.platform.common.ParsedPost;
 import com.echo.platform.common.SingleBodyContent;
-import com.vladsch.flexmark.ast.Node;
 import com.vladsch.flexmark.html.HtmlRenderer;
 import org.springframework.stereotype.Component;
 
@@ -15,6 +14,8 @@ import java.util.regex.Pattern;
 public class LinkedInFormatter implements PlatformFormatter {
 
     private final HtmlRenderer htmlRenderer;
+    // Double-quote character constant avoids any text-block parser ambiguity
+    private static final char DOUBLE_QUOTE = '"';
 
     public LinkedInFormatter() {
         this.htmlRenderer = HtmlRenderer.builder().build();
@@ -25,7 +26,7 @@ public class LinkedInFormatter implements PlatformFormatter {
         String htmlBody = htmlRenderer.render(post.ast());
         String plainText = htmlToPlainText(htmlBody);
         String withUnicodeBold = markdownBoldToUnicode(plainText);
-        
+
         return new SingleBodyContent(
             post.title(),
             withUnicodeBold,
@@ -42,11 +43,11 @@ public class LinkedInFormatter implements PlatformFormatter {
         // Strip HTML tags
         String text = html.replaceAll("<[^>]*>", "");
         // Decode common HTML entities
-        text = text.replace("&", "&")
-                  .replace("<", "<")
-                  .replace(">", ">")
-                  .replace(""", "\"")
-                  .replace("'", "'")
+        text = text.replace("&amp;", "&")
+                  .replace("&lt;", "<")
+                  .replace("&gt;", ">")
+                  .replace("&quot;", String.valueOf(DOUBLE_QUOTE))
+                  .replace("&apos;", "'")
                   .replace("&nbsp;", " ");
         // Normalize whitespace
         text = text.replaceAll("\\s+", " ").trim();
@@ -58,7 +59,7 @@ public class LinkedInFormatter implements PlatformFormatter {
         Pattern pattern = Pattern.compile("\\*\\*(.+?)\\*\\*");
         Matcher matcher = pattern.matcher(text);
         StringBuffer sb = new StringBuffer();
-        
+
         while (matcher.find()) {
             String boldText = matcher.group(1);
             String unicodeBold = toUnicodeBold(boldText);
@@ -77,7 +78,7 @@ public class LinkedInFormatter implements PlatformFormatter {
     }
 
     private char toUnicodeBoldChar(char c) {
-        // Mathematical Bold Unicode range: U+1D400–U+1D7FF
+        // Mathematical Bold Unicode range: U+1D400 to U+1D7FF
         if (c >= 'A' && c <= 'Z') {
             return (char) (0x1D400 + (c - 'A'));
         } else if (c >= 'a' && c <= 'z') {
