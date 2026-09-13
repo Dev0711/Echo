@@ -1,0 +1,47 @@
+.blocknote-custom-wrapper {
+  background: transparent;
+}
+
+.blocknote-custom-wrapper .bn-container {
+  height: 100%;
+}
+
+.blocknote-custom-wrapper .bn-editor {
+  background-color: transparent !important;
+  color: #f2f2f2 !important;
+  font-family: inherit;
+  padding: 24px 32px;
+  min-height: 400px;
+}
+
+/* Custom UI overrides for BlockNote Mantine dark theme */
+.bn-menu-dropdown {
+  background-color: #1a1a1a !important;
+  border: 1px solid #252525 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.5) !important;
+}
+
+.bn-menu-item {
+  color: #a1a1aa !important;
+  transition: all 0.1s ease;
+}
+
+.bn-menu-item:hover, .bn-menu-item[data-hovered] {
+  background-color: #252525 !important;
+  color: #f2f2f2 !important;
+}
+
+.bn-toolbar {
+  background-color: #141414 !important;
+  border: 1px solid #1f1f1f !important;
+  border-radius: 8px !important;
+}
+
+.bn-toolbar-button {
+  color: #a1a1aa !important;
+}
+.bn-toolbar-button:hover {
+  background-color: #252525 !important;
+  color: #f2f2f2 !important;
+}

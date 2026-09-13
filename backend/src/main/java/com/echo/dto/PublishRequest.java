@@ -9,5 +9,8 @@ public record PublishRequest(
     Set<@NotBlank String> platforms,
 
     // Optional per-platform credentials override (for testing)
-    Map<String, PlatformCredentialsDto> credentials
+    Map<String, PlatformCredentialsDto> credentials,
+
+    java.time.LocalDateTime scheduledAt,
+    Map<String, String> platformOverrides
 ) {}

@@ -21,6 +21,7 @@ export interface Post {
   id: string;
   title: string;
   bodyMarkdown: string;
+  structuredContent?: string;
   tags: string[];
   coverImageUrl?: string | null;
   status: PostStatus;
@@ -29,23 +30,30 @@ export interface Post {
   updatedAt: string;
   lastAutosavedAt: string;
   platforms: Record<string, PlatformStatus>;
+  scheduledAt?: string;
+  platformOverrides?: Record<string, string>;
 }
 
 export interface PostCreateRequest {
   title: string;
   bodyMarkdown: string;
+  structuredContent?: string;
   tags?: string[];
   coverImageUrl?: string;
   sourceUrl?: string;
 }
 
 export interface PostAutosaveRequest {
+  title?: string;
   bodyMarkdown: string;
+  structuredContent?: string;
+  platformOverrides?: Record<string, string>;
 }
 
 export interface PublishRequest {
   platforms: string[];
   credentials?: Record<string, PlatformCredentials>;
+  scheduledAt?: string;
 }
 
 export interface PlatformCredentials {

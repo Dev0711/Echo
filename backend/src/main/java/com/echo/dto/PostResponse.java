@@ -19,20 +19,24 @@ public class PostResponse {
     private String id;
     private String title;
     private String bodyMarkdown;
+    private String structuredContent;
     private List<String> tags;
     private String coverImageUrl;
-    private Post.PostStatus status;
+    private String status;
     private String sourceUrl;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime lastAutosavedAt;
     private Map<String, PlatformStatusResponse> platforms;
+    private LocalDateTime scheduledAt;
+    private Map<String, String> platformOverrides;
     
     public static PostResponse from(Post post) {
         return PostResponse.builder()
                 .id(post.id())
                 .title(post.title())
                 .bodyMarkdown(post.bodyMarkdown())
+                .structuredContent(post.structuredContent())
                 .tags(post.tags())
                 .coverImageUrl(post.coverImageUrl())
                 .status(post.status())
@@ -41,6 +45,8 @@ public class PostResponse {
                 .updatedAt(post.updatedAt())
                 .lastAutosavedAt(post.lastAutosavedAt())
                 .platforms(PlatformStatusResponse.fromMap(post.platforms()))
+                .scheduledAt(post.scheduledAt())
+                .platformOverrides(post.platformOverrides())
                 .build();
     }
 }

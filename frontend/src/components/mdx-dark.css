@@ -1,0 +1,30 @@
+.dark-editor {
+  --mdxeditor-toolbar-bg: #141414 !important;
+  --mdxeditor-toolbar-border: #1f1f1f !important;
+  --mdxeditor-toolbar-icon-color: #a1a1aa !important;
+  --mdxeditor-toolbar-icon-hover-bg: #252525 !important;
+  --mdxeditor-dropdown-bg: #1a1a1a !important;
+  --mdxeditor-dropdown-border: #252525 !important;
+  --mdxeditor-dropdown-hover-bg: #252525 !important;
+  --mdxeditor-dropdown-text: #f2f2f2 !important;
+  --mdxeditor-button-bg: transparent !important;
+}
+
+.mdx-custom-wrapper {
+  background: transparent;
+}
+
+.mdx-custom-wrapper .mdxeditor-toolbar {
+  border-bottom: 1px solid #1f1f1f !important;
+  background-color: #141414 !important;
+  border-radius: 0 !important;
+}
+
+.mdx-custom-wrapper .mdxeditor-root-contenteditable {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.mdx-custom-wrapper [role="button"] {
+  border-radius: 6px !important;
+}

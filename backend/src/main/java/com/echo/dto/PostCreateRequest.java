@@ -22,6 +22,8 @@ public class PostCreateRequest {
 
     private String bodyMarkdown;
 
+    private String structuredContent;
+
     @Size(max = 10, message = "Maximum 10 tags allowed")
     private List<@Size(max = 30) String> tags;
 

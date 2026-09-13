@@ -12,16 +12,16 @@ public record Post(
         @Id String id,
         String title,
         String bodyMarkdown,
+        String structuredContent,
         List<String> tags,
         String coverImageUrl,
-        PostStatus status,
+        String status,
         String sourceUrl,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
         LocalDateTime lastAutosavedAt,
-        Map<String, PlatformStatus> platforms
+        Map<String, PlatformStatus> platforms,
+        LocalDateTime scheduledAt,
+        Map<String, String> platformOverrides
 ) {
-    public enum PostStatus {
-        DRAFT, READY, PUBLISHED
-    }
 }

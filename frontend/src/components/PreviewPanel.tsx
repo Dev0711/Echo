@@ -1,183 +1,175 @@
 'use client';
 
 import { useState } from 'react';
-import type { PreviewResponse, FormattedContentResponse } from '@/types';
-import { Twitter, Linkedin, Globe, FileText, CheckCircle, Copy, User } from 'lucide-react';
+import type { PreviewResponse } from '@/types';
+import { Twitter, Linkedin, Globe, FileText, CheckCircle, Copy, User, BookOpen } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
 
 interface PreviewPanelProps {
   previews: PreviewResponse['previews'];
 }
 
-const platformIcons: Record<string, React.ComponentType<{ size?: number, className?: string }>> = {
-  devto: Globe as React.ComponentType<{ size?: number, className?: string }>,
-  hashnode: FileText as React.ComponentType<{ size?: number, className?: string }>,
-  twitter: Twitter as React.ComponentType<{ size?: number, className?: string }>,
-  linkedin: Linkedin as React.ComponentType<{ size?: number, className?: string }>,
-};
-
-const platformNames: Record<string, string> = {
-  devto: 'Dev.to',
-  hashnode: 'Hashnode',
-  twitter: 'X (Twitter)',
-  linkedin: 'LinkedIn',
+const PLATFORM_META: Record<string, { name: string; icon: React.ComponentType<{ size?: number; className?: string }> }> = {
+  devto:    { name: 'Dev.to',      icon: Globe as any },
+  hashnode: { name: 'Hashnode',    icon: FileText as any },
+  medium:   { name: 'Medium',      icon: BookOpen as any },
+  twitter:  { name: 'X (Twitter)', icon: Twitter as any },
+  linkedin: { name: 'LinkedIn',    icon: Linkedin as any },
 };
 
 export function PreviewPanel({ previews }: PreviewPanelProps) {
   const tabs = Object.keys(previews);
-  const [activeTab, setActiveTab] = useState<string>(tabs.length > 0 ? tabs[0] : 'devto');
+  const [activeTab, setActiveTab] = useState<string>(tabs[0] ?? 'devto');
   const [copied, setCopied] = useState<string | null>(null);
+
+  const copyToClipboard = (content: string, id: string) => {
+    navigator.clipboard.writeText(content);
+    setCopied(id);
+    setTimeout(() => setCopied(null), 2000);
+  };
 
   if (tabs.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full glass-panel rounded-2xl text-gray-500 dark:text-gray-400">
-        <div className="flex flex-col items-center gap-4 opacity-50">
-          <Globe size={48} />
-          <p>Hit "Preview" to see how your post will look across platforms.</p>
-        </div>
+      <div className="h-full flex flex-col items-center justify-center text-center px-8">
+        <Globe size={24} className="text-[#3a3a3a] mb-3" />
+        <p className="text-[13px] text-[#52525b]">No preview available.</p>
       </div>
     );
   }
 
-  const copyToClipboard = (content: string, platform: string) => {
-    navigator.clipboard.writeText(content);
-    setCopied(platform);
-    setTimeout(() => setCopied(null), 2000);
-  };
-
   const activePreview = previews[activeTab];
 
   return (
-    <div className="flex flex-col h-full glass-panel rounded-2xl overflow-hidden shadow-2xl">
-      {/* Premium Tab Bar */}
-      <div className="flex px-2 pt-2 gap-1 border-b border-white/10 bg-black/20 overflow-x-auto scrollbar-hide">
-        {tabs.map((platform) => {
-          const Icon = platformIcons[platform] || Globe;
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Tab bar */}
+      <div className="flex items-center px-4 shrink-0 overflow-x-auto hide-scrollbar" style={{ borderBottom: '1px solid #1f1f1f' }}>
+        {tabs.map(platform => {
+          const meta = PLATFORM_META[platform] ?? { name: platform, icon: Globe as any };
+          const Icon = meta.icon;
           const isActive = activeTab === platform;
-          
           return (
             <button
               key={platform}
               onClick={() => setActiveTab(platform)}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium rounded-t-xl transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-[12px] font-medium border-b-2 transition-colors whitespace-nowrap ${
                 isActive
-                  ? 'bg-white/10 text-white shadow-sm border-t border-x border-white/10'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                  ? 'border-indigo-500 text-[#f2f2f2]'
+                  : 'border-transparent text-[#71717a] hover:text-[#d4d4d4]'
               }`}
             >
-              <Icon size={16} className={isActive ? "text-indigo-400" : ""} />
-              <span>{platformNames[platform] || platform}</span>
-              {isActive && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-t-full shadow-[0_-2px_10px_rgba(99,102,241,0.5)]" />}
+              <Icon size={12} className={isActive ? 'text-indigo-400' : ''} />
+              {meta.name}
             </button>
           );
         })}
       </div>
-      
-      {/* Platform-Specific Preview Area */}
-      <div className="flex-1 overflow-auto p-6 bg-black/40">
-        {activePreview ? (
-          <div className="mx-auto max-w-2xl transition-all animate-in fade-in slide-in-from-bottom-4 duration-500">
-            
-            {/* TWITTER PREVIEW */}
-            {activeTab === 'twitter' && activePreview.type === 'CHUNKED' && (
-              <div className="space-y-4">
-                {activePreview.chunks?.map((chunk, index) => (
-                  <div key={index} className="bg-white dark:bg-[#16181C] border border-gray-200 dark:border-[#2F3336] rounded-2xl p-4 shadow-sm relative group hover:bg-gray-50 dark:hover:bg-[#1C1F23] transition-colors">
-                    <div className="flex gap-3">
-                      <div className="w-12 h-12 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-full flex items-center justify-center shrink-0">
-                        <User className="text-white" size={24} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1 mb-1">
-                          <span className="font-bold text-gray-900 dark:text-white truncate">You</span>
-                          <span className="text-gray-500 dark:text-[#71767B]">@yourhandle</span>
-                          <span className="text-gray-500 dark:text-[#71767B]">·</span>
-                          <span className="text-gray-500 dark:text-[#71767B]">Just now</span>
+
+      {/* Preview content */}
+      <ScrollArea className="flex-1">
+        <div className="p-6">
+          {!activePreview ? (
+            <p className="text-[12px] text-[#52525b]">Preview not available for this platform.</p>
+          ) : (
+            <>
+              {/* TWITTER — thread preview */}
+              {activeTab === 'twitter' && activePreview.type === 'CHUNKED' && (
+                <div className="space-y-3 max-w-lg mx-auto">
+                  <p className="label-xs mb-3">Thread Preview — {activePreview.chunks?.length} tweets</p>
+                  {activePreview.chunks?.map((chunk, i) => (
+                    <div key={i} className="bg-[#141414] border border-[#252525] rounded-lg p-4 relative group">
+                      <div className="flex gap-3">
+                        <div className="w-8 h-8 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center shrink-0">
+                          <User size={14} className="text-indigo-400" />
                         </div>
-                        <p className="whitespace-pre-wrap text-gray-900 dark:text-white text-[15px] leading-normal font-sans">
-                          {chunk}
-                        </p>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="text-[12px] font-semibold text-[#f2f2f2]">You</span>
+                            <span className="text-[11px] text-[#52525b]">@yourhandle · now</span>
+                          </div>
+                          <p className="whitespace-pre-wrap text-[13px] text-[#d4d4d4] leading-relaxed">{chunk}</p>
+                        </div>
                       </div>
+                      {i < (activePreview.chunks!.length - 1) && (
+                        <div className="absolute left-[27px] top-[52px] bottom-[-14px] w-px bg-[#252525]" />
+                      )}
+                      <button
+                        onClick={() => copyToClipboard(chunk, `tw-${i}`)}
+                        className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        {copied === `tw-${i}` ? <CheckCircle size={12} className="text-emerald-400" /> : <Copy size={12} className="text-[#52525b] hover:text-[#d4d4d4]" />}
+                      </button>
                     </div>
-                    {/* Thread connector line */}
-                    {index < (activePreview.chunks!.length - 1) && (
-                      <div className="absolute left-[39px] top-[64px] bottom-[-20px] w-0.5 bg-gray-200 dark:bg-[#2F3336]" />
-                    )}
-                    <button
-                      onClick={() => copyToClipboard(chunk, `twitter-${index}`)}
-                      className="absolute top-4 right-4 p-2 bg-gray-100 dark:bg-gray-800 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-gray-200 dark:hover:bg-gray-700"
-                    >
-                      <Copy size={14} className="text-gray-600 dark:text-gray-300" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            
-            {/* LINKEDIN PREVIEW */}
-            {activeTab === 'linkedin' && activePreview.type === 'SINGLE_BODY' && (
-              <div className="bg-white dark:bg-[#1D2226] border border-gray-200 dark:border-gray-700/50 rounded-xl shadow-sm overflow-hidden group">
-                <div className="flex gap-3 p-4">
-                  <div className="w-12 h-12 bg-gradient-to-tr from-blue-500 to-cyan-500 rounded-full flex items-center justify-center shrink-0">
-                    <User className="text-white" size={24} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-gray-900 dark:text-white text-sm">Your Name</h3>
-                    <p className="text-gray-500 dark:text-gray-400 text-xs">Content Creator • Software Engineer</p>
-                    <p className="text-gray-500 dark:text-gray-400 text-xs flex items-center gap-1">Just now • 🌐</p>
-                  </div>
+                  ))}
                 </div>
-                <div className="px-4 pb-4">
-                  <p className="whitespace-pre-wrap text-gray-900 dark:text-white text-sm font-sans leading-relaxed">
-                    {activePreview.body}
-                  </p>
-                </div>
-                <div className="border-t border-gray-200 dark:border-gray-700/50 px-4 py-2 bg-gray-50 dark:bg-[#1D2226]">
-                   <span className="text-xs text-gray-500 font-medium">👍 1,234 • 💬 89 comments</span>
-                </div>
-              </div>
-            )}
+              )}
 
-            {/* DEV.TO / HASHNODE PREVIEW */}
-            {(activeTab === 'devto' || activeTab === 'hashnode') && activePreview.type === 'SINGLE_BODY' && (
-              <div className="bg-white dark:bg-black border border-gray-200 dark:border-white/10 rounded-xl p-8 shadow-sm">
-                {activePreview.title && (
-                  <h1 className="text-4xl font-extrabold text-gray-900 dark:text-white mb-6 leading-tight">{activePreview.title}</h1>
-                )}
-                {activePreview.tags && activePreview.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-8">
-                    {activePreview.tags.map((tag) => (
-                      <span key={tag} className="px-2.5 py-1 text-sm font-medium bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-300 rounded-md">
-                        #{tag}
-                      </span>
-                    ))}
+              {/* LINKEDIN — post preview */}
+              {activeTab === 'linkedin' && activePreview.type === 'SINGLE_BODY' && (
+                <div className="max-w-lg mx-auto bg-[#141414] border border-[#252525] rounded-lg overflow-hidden">
+                  <div className="flex gap-3 p-4">
+                    <div className="w-10 h-10 rounded-full bg-blue-500/20 border border-blue-500/30 flex items-center justify-center shrink-0">
+                      <User size={16} className="text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="text-[13px] font-semibold text-[#f2f2f2]">Your Name</p>
+                      <p className="text-[11px] text-[#52525b]">Content Creator · Just now · 🌐</p>
+                    </div>
                   </div>
-                )}
-                <div 
-                  className="prose prose-lg dark:prose-invert max-w-none font-serif"
-                  dangerouslySetInnerHTML={{ __html: activePreview.body || '' }}
-                />
-              </div>
-            )}
+                  <Separator />
+                  <div className="p-4">
+                    <p className="whitespace-pre-wrap text-[13px] text-[#d4d4d4] leading-relaxed">{activePreview.body}</p>
+                  </div>
+                  <Separator />
+                  <div className="px-4 py-2 flex items-center gap-4">
+                    <span className="text-[11px] text-[#52525b]">👍 Like</span>
+                    <span className="text-[11px] text-[#52525b]">💬 Comment</span>
+                    <span className="text-[11px] text-[#52525b]">🔁 Repost</span>
+                  </div>
+                </div>
+              )}
 
-          </div>
-        ) : (
-          <div className="flex items-center justify-center h-full text-gray-500">
-            Preview format not supported
-          </div>
-        )}
-      </div>
-      
-      {/* Copy button footer */}
-      {activePreview?.type === 'SINGLE_BODY' && activePreview.body && (
-        <div className="flex justify-end p-4 border-t border-white/10 bg-black/20 backdrop-blur-md">
-          <button
-            onClick={() => copyToClipboard(activePreview.body || '', activeTab)}
-            className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-500/25 transition-all active:scale-95"
-          >
-            {copied === activeTab ? <CheckCircle size={16} /> : <Copy size={16} />}
-            {copied === activeTab ? 'Copied to Clipboard!' : 'Copy Raw Content'}
-          </button>
+              {/* DEV.TO / HASHNODE / MEDIUM — article preview */}
+              {['devto', 'hashnode', 'medium'].includes(activeTab) && activePreview.type === 'SINGLE_BODY' && (
+                <div className="max-w-2xl mx-auto">
+                  {activePreview.title && (
+                    <h1 className="text-[22px] font-bold text-[#f2f2f2] leading-tight mb-4">{activePreview.title}</h1>
+                  )}
+                  {activePreview.tags && activePreview.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-5">
+                      {activePreview.tags.map(tag => (
+                        <Badge key={tag} variant="default">#{tag}</Badge>
+                      ))}
+                    </div>
+                  )}
+                  <Separator className="mb-5" />
+                  <div
+                    className="prose prose-sm prose-invert max-w-none text-[13px] leading-relaxed text-[#d4d4d4]"
+                    dangerouslySetInnerHTML={{ __html: activePreview.body || '' }}
+                  />
+                </div>
+              )}
+            </>
+          )}
         </div>
+      </ScrollArea>
+
+      {/* Footer copy button */}
+      {activePreview?.type === 'SINGLE_BODY' && activePreview.body && (
+        <>
+          <Separator />
+          <div className="px-4 py-3 flex justify-end shrink-0">
+            <Button
+              variant="outline" size="sm"
+              onClick={() => copyToClipboard(activePreview.body!, activeTab)}
+            >
+              {copied === activeTab ? <CheckCircle size={12} className="text-emerald-400" /> : <Copy size={12} />}
+              {copied === activeTab ? 'Copied!' : 'Copy Content'}
+            </Button>
+          </div>
+        </>
       )}
     </div>
   );

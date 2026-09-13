@@ -49,5 +49,8 @@ echo:
   frontend-url: ${FRONTEND_URL:http://localhost:3000}
   media:
     storage:
-      type: ${MEDIA_STORAGE_TYPE:local}
-      local-path: ${MEDIA_LOCAL_PATH:./uploads}
+      type: ${MEDIA_STORAGE_TYPE:cloudinary}
+  cloudinary:
+    cloud-name: ${CLOUDINARY_CLOUD_NAME:YOUR_CLOUD_NAME_HERE}
+    api-key: ${CLOUDINARY_API_KEY:YOUR_API_KEY_HERE}
+    api-secret: ${CLOUDINARY_API_SECRET:YOUR_API_SECRET_HERE}

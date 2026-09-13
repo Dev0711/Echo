@@ -86,8 +86,9 @@ public class PostService {
         
         Post updated = new Post(
                 existing.id(),
-                existing.title(),
+                request.title() != null ? request.title() : existing.title(),
                 request.bodyMarkdown(),
+                request.structuredContent() != null ? request.structuredContent() : existing.structuredContent(),
                 existing.tags(),
                 existing.coverImageUrl(),
                 existing.status(),
@@ -95,7 +96,9 @@ public class PostService {
                 existing.createdAt(),
                 LocalDateTime.now(),
                 LocalDateTime.now(),
-                existing.platforms()
+                existing.platforms(),
+                existing.scheduledAt(),
+                request.platformOverrides()
         );
         
         Post saved = postRepository.save(updated);
@@ -143,6 +146,45 @@ public class PostService {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Post", postId));
         
+        if (request.scheduledAt() != null && request.scheduledAt().isAfter(LocalDateTime.now())) {
+            Post scheduledPost = new Post(
+                post.id(),
+                post.title(),
+                post.bodyMarkdown(),
+                post.structuredContent(),
+                post.tags(),
+                post.coverImageUrl(),
+                "SCHEDULED",
+                post.sourceUrl(),
+                post.createdAt(),
+                LocalDateTime.now(),
+                post.lastAutosavedAt(),
+                post.platforms(),
+                request.scheduledAt(),
+                request.platformOverrides() != null ? request.platformOverrides() : post.platformOverrides()
+            );
+            postRepository.save(scheduledPost);
+            return;
+        }
+
+        post = new Post(
+            post.id(),
+            post.title(),
+            post.bodyMarkdown(),
+            post.structuredContent(),
+            post.tags(),
+            post.coverImageUrl(),
+            "PUBLISHED",
+            post.sourceUrl(),
+            post.createdAt(),
+            LocalDateTime.now(),
+            post.lastAutosavedAt(),
+            post.platforms(),
+            post.scheduledAt(),
+            request.platformOverrides() != null ? request.platformOverrides() : post.platformOverrides()
+        );
+        post = postRepository.save(post);
+
         Node ast = markdownParser.parse(post.bodyMarkdown());
         ParsedPost parsedPost = new ParsedPost(
                 post.title(),
@@ -187,10 +229,77 @@ public class PostService {
             if (creds == null) {
                 creds = credentialsProvider.getCredentials(platformKey, request.credentials());
             }
+            // Parse specific body if override exists
+            String bodyToParse = (post.platformOverrides() != null && post.platformOverrides().containsKey(platformKey)) 
+                ? post.platformOverrides().get(platformKey) 
+                : post.bodyMarkdown();
+                
+            Node platformAst = markdownParser.parse(bodyToParse);
+            ParsedPost platformParsedPost = new ParsedPost(
+                    post.title(),
+                    platformAst,
+                    post.tags(),
+                    post.coverImageUrl()
+            );
             
             // Publish asynchronously
-            publishToPlatformAsync(postId, platformKey, parsedPost, creds);
+            publishToPlatformAsync(postId, platformKey, platformParsedPost, creds);
         }
+    }
+
+    public void publishScheduled(Post post) {
+        Node ast = markdownParser.parse(post.bodyMarkdown());
+        ParsedPost parsedPost = new ParsedPost(
+                post.title(),
+                ast,
+                post.tags(),
+                post.coverImageUrl()
+        );
+
+        for (String platformKey : post.platforms().keySet()) {
+            PlatformStatus existingStatus = post.platforms().get(platformKey);
+            if (existingStatus != null && 
+                (existingStatus.status() == PlatformStatus.PlatformPublishStatus.PUBLISHED || 
+                 existingStatus.status() == PlatformStatus.PlatformPublishStatus.PENDING)) {
+                continue; 
+            }
+
+            PlatformCredentials creds = credentialsProvider.getCredentials(platformKey, null);
+            
+            // Parse specific body if override exists
+            String bodyToParse = (post.platformOverrides() != null && post.platformOverrides().containsKey(platformKey)) 
+                ? post.platformOverrides().get(platformKey) 
+                : post.bodyMarkdown();
+                
+            Node platformAst = markdownParser.parse(bodyToParse);
+            ParsedPost platformParsedPost = new ParsedPost(
+                    post.title(),
+                    platformAst,
+                    post.tags(),
+                    post.coverImageUrl()
+            );
+            
+            publishToPlatformAsync(post.id(), platformKey, platformParsedPost, creds);
+        }
+
+        // update the post status to 'PUBLISHED'
+        Post updatedPost = new Post(
+            post.id(),
+            post.title(),
+            post.bodyMarkdown(),
+            post.structuredContent(),
+            post.tags(),
+            post.coverImageUrl(),
+            "PUBLISHED",
+            post.sourceUrl(),
+            post.createdAt(),
+            LocalDateTime.now(),
+            post.lastAutosavedAt(),
+            post.platforms(),
+            post.scheduledAt(),
+            post.platformOverrides()
+        );
+        postRepository.save(updatedPost);
     }
 
     @Async
@@ -260,6 +369,7 @@ public class PostService {
                 post.id(),
                 post.title(),
                 post.bodyMarkdown(),
+                post.structuredContent(),
                 post.tags(),
                 post.coverImageUrl(),
                 post.status(),
@@ -267,7 +377,9 @@ public class PostService {
                 post.createdAt(),
                 LocalDateTime.now(),
                 post.lastAutosavedAt(),
-                platforms
+                platforms,
+                post.scheduledAt(),
+                post.platformOverrides()
         );
         
         postRepository.save(updatedPost);
