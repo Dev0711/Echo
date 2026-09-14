@@ -46,10 +46,11 @@ public class OAuthSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
 
         if (user == null) {
             user = new User(null, googleId, email, name, picture,
-                    LocalDateTime.now(), LocalDateTime.now());
+                    LocalDateTime.now(), LocalDateTime.now(), null, null);
         } else {
             user = new User(user.id(), user.googleId(), user.email(),
-                    name, picture, user.createdAt(), LocalDateTime.now());
+                    name, picture, user.createdAt(), LocalDateTime.now(),
+                    user.bio(), user.avatarUrl());
         }
         user = userRepository.save(user);
 

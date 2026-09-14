@@ -21,9 +21,11 @@ import java.util.List;
 public class PostController {
 
     private final PostService postService;
+    private final com.echo.service.GeminiService geminiService;
 
-    public PostController(PostService postService) {
+    public PostController(PostService postService, com.echo.service.GeminiService geminiService) {
         this.postService = postService;
+        this.geminiService = geminiService;
     }
 
     @GetMapping
@@ -64,5 +66,18 @@ public class PostController {
             @PathVariable String id,
             @Valid @RequestBody PublishRequest request) {
         postService.publish(id, request);
+    }
+
+    @GetMapping("/{id}/versions")
+    public java.util.List<com.echo.model.PostVersion> getVersions(@PathVariable String id) {
+        return postService.getVersions(id);
+    }
+
+    @PostMapping("/{id}/ai-assist")
+    public com.echo.dto.AiAssistResponse aiAssist(@PathVariable String id, @RequestBody com.echo.dto.AiAssistRequest request) {
+        PostResponse post = postService.getPost(id);
+        // We'll let the controller call geminiService.assist
+        String result = geminiService.assist(request.action(), post.getBodyMarkdown());
+        return new com.echo.dto.AiAssistResponse(result);
     }
 }

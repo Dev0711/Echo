@@ -21,9 +21,15 @@ import {
   Plus, Eye, EyeOff, Send, Loader2, PenTool,
   Settings, Twitter, Linkedin, Globe, FileText,
   CheckCircle, AlertCircle, ChevronDown, ChevronUp,
-  BookOpen, Clock, Bell, Maximize2, Minimize2, BarChart2
+  BookOpen, Clock, Bell, Maximize2, Minimize2, BarChart2,
+  Sparkles, History, User
 } from 'lucide-react';
 import { Logo } from '@/components/Logo';
+import { TemplatePickerModal } from '@/components/TemplatePickerModal';
+import { VersionHistoryPanel } from '@/components/VersionHistoryPanel';
+import { AiAssistantPanel } from '@/components/AiAssistantPanel';
+import { NotificationPanel, NotificationBell, useNotificationStore } from '@/components/NotificationPanel';
+import { AnalyticsDashboard } from '@/components/AnalyticsDashboard';
 import type { PostCreateRequest, PublishRequest, PlatformCredentials, PreviewResponse } from '@/types';
 
 // ─── Platform Config ─────────────────────────────────────────────────────────
@@ -93,6 +99,15 @@ export default function DashboardPage() {
   const [currentView, setCurrentView] = useState<'DRAFT' | 'PUBLISHED' | 'ANALYTICS'>('DRAFT');
   const [isFullScreen, setIsFullScreen] = useState(false);
 
+  // Panel state
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [showAiAssistant, setShowAiAssistant] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [templateInitialBlocks, setTemplateInitialBlocks] = useState<object[] | null>(null);
+
+  const { addNotification } = useNotificationStore();
+
   const { posts, currentPost, setPosts, addPost, updatePost, setCurrentPost, setLoading, setError, isLoading } = usePostStore();
   const user = auth.getUser();
 
@@ -119,14 +134,20 @@ export default function DashboardPage() {
     finally { setLoading(false); }
   };
 
-  const handleCreatePost = async () => {
+  const handleCreatePost = async (templateBlocks?: object[]) => {
     if (!newPostTitle.trim()) return;
     setLoading(true);
     try {
-      const req: PostCreateRequest = { title: newPostTitle.trim(), bodyMarkdown: '', tags: [] };
+      const req: PostCreateRequest = { 
+        title: newPostTitle.trim(), 
+        bodyMarkdown: '', 
+        structuredContent: templateBlocks && templateBlocks.length > 0 ? JSON.stringify(templateBlocks) : undefined,
+        tags: [] 
+      };
       const res = await postsApi.create(req);
       addPost(res.data); setCurrentPost(res.data);
       setNewPostTitle(''); setIsCreating(false); setCurrentView('DRAFT');
+      addNotification({ type: 'info', title: 'New draft created', message: `"${res.data.title}" is ready to edit.` });
     } catch { setError('Failed to create post'); }
     finally { setLoading(false); }
   };
@@ -163,11 +184,14 @@ export default function DashboardPage() {
         ...(isScheduling && scheduledAt ? { scheduledAt: new Date(scheduledAt).toISOString() } : {})
       };
       await postsApi.publish(currentPost.id, req);
+      const msg = isScheduling && scheduledAt ? 'Scheduled successfully' : 'Published successfully';
       setPublishResult({ success: true, message: isScheduling && scheduledAt ? 'Scheduled' : 'Published' });
+      addNotification({ type: 'success', title: msg, message: `"${currentPost.title}" was published to ${Array.from(selectedPlatforms).join(', ')}.` });
       loadPosts();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setPublishResult({ success: false, message: msg || 'Publish failed' });
+      addNotification({ type: 'error', title: 'Publish failed', message: msg || 'Something went wrong publishing your post.' });
     } finally { setIsPublishing(false); }
   };
 
@@ -252,6 +276,10 @@ export default function DashboardPage() {
             <div className="flex-1 min-w-0">
               <p suppressHydrationWarning className="text-[11px] text-[#d4d4d4] truncate font-medium">{user?.name ?? 'Account'}</p>
             </div>
+            <NotificationBell onClick={() => setShowNotifications(true)} />
+            <a href="/profile" className="p-2 rounded-lg hover:bg-white/8 text-zinc-500 hover:text-white transition-colors">
+              <User size={14} />
+            </a>
             <a href="/settings" className="text-[#52525b] hover:text-[#d4d4d4] transition-colors">
               <Settings size={12} />
             </a>
@@ -350,10 +378,30 @@ export default function DashboardPage() {
               <Separator orientation="vertical" className="h-4" />
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon"><Bell size={13} /></Button>
+                  <Button variant="ghost" size="icon" onClick={() => setShowNotifications(true)}><Bell size={13} /></Button>
                 </TooltipTrigger>
                 <TooltipContent>Notifications</TooltipContent>
               </Tooltip>
+              {currentPost && (
+                <>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" onClick={() => setShowAiAssistant(true)}>
+                        <Sparkles size={13} className="text-violet-400" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>AI Assistant</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" onClick={() => setShowVersionHistory(true)}>
+                        <History size={13} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Version History</TooltipContent>
+                  </Tooltip>
+                </>
+              )}
             </div>
           </header>
         )}
@@ -363,7 +411,7 @@ export default function DashboardPage() {
           {currentView === 'PUBLISHED' ? (
             <PublishedView posts={posts} onSelect={(post) => { setCurrentPost(post); setCurrentView('DRAFT'); }} />
           ) : currentView === 'ANALYTICS' ? (
-            <AnalyticsView />
+            <AnalyticsDashboard />
           ) : currentPost ? (
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
               {/* Title bar - hidden during preview */}
@@ -393,6 +441,27 @@ export default function DashboardPage() {
           )}
         </div>
       </main>
+
+      {/* ── Panels ──────────────────────────────────────────────────────────── */}
+      <NotificationPanel isOpen={showNotifications} onClose={() => setShowNotifications(false)} />
+      {currentPost && (
+        <>
+          <AiAssistantPanel
+            postId={currentPost.id}
+            isOpen={showAiAssistant}
+            onClose={() => setShowAiAssistant(false)}
+            onApply={(text) => { /* Appended text handled by user copy */ }}
+          />
+          <VersionHistoryPanel
+            postId={currentPost.id}
+            isOpen={showVersionHistory}
+            onClose={() => setShowVersionHistory(false)}
+            onRestore={(markdown) => {
+              updatePost(currentPost.id, { bodyMarkdown: markdown, structuredContent: undefined });
+            }}
+          />
+        </>
+      )}
 
       {/* ── Right Panel: Publish ──────────────────────────────────────────── */}
       {currentPost && !isFullScreen && !showPreview && currentView === 'DRAFT' && (
@@ -469,22 +538,30 @@ export default function DashboardPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>New draft</DialogTitle>
-            <DialogDescription>Give your post a working title.</DialogDescription>
+            <DialogDescription>Give your post a working title to get started.</DialogDescription>
           </DialogHeader>
           <input
             type="text"
             value={newPostTitle}
             onChange={e => setNewPostTitle(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleCreatePost()}
+            onKeyDown={e => e.key === 'Enter' && handleCreatePost(templateInitialBlocks || undefined)}
             placeholder="Post title..."
             className="w-full px-3 py-2 bg-[#1a1a1a] border border-[#252525] rounded-md text-[13px] text-[#f2f2f2] placeholder-[#52525b] focus:outline-none focus:border-indigo-500"
             autoFocus
           />
+          <button
+            type="button"
+            onClick={() => setShowTemplatePicker(true)}
+            className="text-xs text-violet-400 hover:text-violet-300 text-left transition-colors flex items-center gap-1.5"
+          >
+            <Sparkles size={11} />
+            {templateInitialBlocks && templateInitialBlocks.length > 0 ? '✓ Template selected — click to change' : 'Choose a template (optional)'}
+          </button>
           <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setIsCreating(false)}>Cancel</Button>
+            <Button variant="outline" size="sm" onClick={() => { setIsCreating(false); setTemplateInitialBlocks(null); }}>Cancel</Button>
             <Button
               size="sm"
-              onClick={handleCreatePost}
+              onClick={() => handleCreatePost(templateInitialBlocks || undefined)}
               disabled={!newPostTitle.trim() || isLoading}
             >
               {isLoading ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
@@ -493,6 +570,13 @@ export default function DashboardPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Template Picker */}
+      <TemplatePickerModal
+        isOpen={showTemplatePicker}
+        onClose={() => setShowTemplatePicker(false)}
+        onSelect={(blocks) => { setTemplateInitialBlocks(blocks); setShowTemplatePicker(false); }}
+      />
 
       {/* ── Settings Required Dialog ────────────────────────────────────────── */}
       <Dialog open={!!showSettingsDialog} onOpenChange={() => setShowSettingsDialog(null)}>
@@ -614,16 +698,6 @@ function PublishedView({ posts, onSelect }: { posts: any[]; onSelect: (p: any) =
   );
 }
 
-// ─── Analytics View ───────────────────────────────────────────────────────────
-function AnalyticsView() {
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
-      <BarChart2 size={28} className="text-[#3a3a3a] mb-3" />
-      <h2 className="text-[15px] font-semibold text-[#f2f2f2] mb-1">Analytics</h2>
-      <p className="text-[12px] text-[#52525b]">Cross-platform performance metrics — coming soon.</p>
-    </div>
-  );
-}
 
 // ─── Empty State ──────────────────────────────────────────────────────────────
 function EmptyState({ onCreate }: { onCreate: () => void }) {

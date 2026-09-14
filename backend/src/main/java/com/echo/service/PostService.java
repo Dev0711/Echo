@@ -90,7 +90,7 @@ public class PostService {
                 request.bodyMarkdown(),
                 request.structuredContent() != null ? request.structuredContent() : existing.structuredContent(),
                 existing.tags(),
-                existing.coverImageUrl(),
+                request.coverImageUrl() != null ? request.coverImageUrl() : existing.coverImageUrl(),
                 existing.status(),
                 existing.sourceUrl(),
                 existing.createdAt(),
@@ -98,7 +98,10 @@ public class PostService {
                 LocalDateTime.now(),
                 existing.platforms(),
                 existing.scheduledAt(),
-                request.platformOverrides()
+                request.platformOverrides() != null ? request.platformOverrides() : existing.platformOverrides(),
+                request.metaDescription() != null ? request.metaDescription() : existing.metaDescription(),
+                request.canonicalUrl() != null ? request.canonicalUrl() : existing.canonicalUrl(),
+                request.seoImageUrl() != null ? request.seoImageUrl() : existing.seoImageUrl()
         );
         
         Post saved = postRepository.save(updated);
@@ -119,6 +122,10 @@ public class PostService {
                     .toList();
             postVersionRepository.deleteAllById(toDelete);
         }
+    }
+
+    public List<PostVersion> getVersions(String postId) {
+        return postVersionRepository.findAllByPostIdOrderBySavedAtDesc(postId);
     }
 
     public PreviewResponse preview(String postId) {
@@ -161,7 +168,10 @@ public class PostService {
                 post.lastAutosavedAt(),
                 post.platforms(),
                 request.scheduledAt(),
-                request.platformOverrides() != null ? request.platformOverrides() : post.platformOverrides()
+                request.platformOverrides() != null ? request.platformOverrides() : post.platformOverrides(),
+                post.metaDescription(),
+                post.canonicalUrl(),
+                post.seoImageUrl()
             );
             postRepository.save(scheduledPost);
             return;
@@ -181,7 +191,10 @@ public class PostService {
             post.lastAutosavedAt(),
             post.platforms(),
             post.scheduledAt(),
-            request.platformOverrides() != null ? request.platformOverrides() : post.platformOverrides()
+            request.platformOverrides() != null ? request.platformOverrides() : post.platformOverrides(),
+            post.metaDescription(),
+            post.canonicalUrl(),
+            post.seoImageUrl()
         );
         post = postRepository.save(post);
 
@@ -297,7 +310,10 @@ public class PostService {
             post.lastAutosavedAt(),
             post.platforms(),
             post.scheduledAt(),
-            post.platformOverrides()
+            post.platformOverrides(),
+            post.metaDescription(),
+            post.canonicalUrl(),
+            post.seoImageUrl()
         );
         postRepository.save(updatedPost);
     }
@@ -379,7 +395,10 @@ public class PostService {
                 post.lastAutosavedAt(),
                 platforms,
                 post.scheduledAt(),
-                post.platformOverrides()
+                post.platformOverrides(),
+                post.metaDescription(),
+                post.canonicalUrl(),
+                post.seoImageUrl()
         );
         
         postRepository.save(updatedPost);

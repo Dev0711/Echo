@@ -1,5 +1,5 @@
 // Add credential types to the existing types file
-export type PostStatus = 'DRAFT' | 'READY' | 'PUBLISHED';
+export type PostStatus = 'DRAFT' | 'READY' | 'PUBLISHED' | 'SCHEDULED';
 
 export type PlatformPublishStatus =
   | 'NOT_STARTED'
@@ -32,6 +32,9 @@ export interface Post {
   platforms: Record<string, PlatformStatus>;
   scheduledAt?: string;
   platformOverrides?: Record<string, string>;
+  metaDescription?: string;
+  canonicalUrl?: string;
+  seoImageUrl?: string;
 }
 
 export interface PostCreateRequest {
@@ -48,6 +51,10 @@ export interface PostAutosaveRequest {
   bodyMarkdown: string;
   structuredContent?: string;
   platformOverrides?: Record<string, string>;
+  coverImageUrl?: string | null;
+  metaDescription?: string;
+  canonicalUrl?: string;
+  seoImageUrl?: string;
 }
 
 export interface PublishRequest {

@@ -1,10 +1,7 @@
 package com.echo.dto;
 
-public record UserResponse(
-    String id,
-    String email,
+public record UpdateProfileRequest(
     String name,
-    String picture,
     String bio,
     String avatarUrl
 ) {}

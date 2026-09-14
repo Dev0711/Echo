@@ -13,5 +13,7 @@ public record User(
         String name,
         String picture,
         LocalDateTime createdAt,
-        LocalDateTime lastLoginAt
+        LocalDateTime lastLoginAt,
+        String bio,
+        String avatarUrl
 ) {}

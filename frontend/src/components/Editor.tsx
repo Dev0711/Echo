@@ -6,7 +6,9 @@ const BlockEditor = dynamic(() => import('./BlockEditor'), { ssr: false });
 import { usePostStore } from '@/lib/store';
 import { postsApi } from '@/lib/api';
 import type { Post, PostAutosaveRequest } from '@/types';
-import { AlertCircle, CheckCircle, Loader2, Tag, X, Twitter, Linkedin, Globe, FileText, BookOpen } from 'lucide-react';
+import { AlertCircle, CheckCircle, Loader2, Tag, X } from 'lucide-react';
+import { CoverImageUpload } from './CoverImageUpload';
+import { SeoPanel } from './SeoPanel';
 
 interface EditorProps {
   post: Post | null;
@@ -69,7 +71,11 @@ export function Editor({ post, onTitleChange, onStatusChange }: EditorProps) {
       title: post.title,
       bodyMarkdown: markdown,
       structuredContent: structuredContent,
-      platformOverrides: post.platformOverrides
+      platformOverrides: post.platformOverrides,
+      coverImageUrl: post.coverImageUrl,
+      metaDescription: post.metaDescription,
+      canonicalUrl: post.canonicalUrl,
+      seoImageUrl: post.seoImageUrl,
     };
     postsApi.autosave(post.id, request)
       .then(() => {
@@ -182,26 +188,20 @@ export function Editor({ post, onTitleChange, onStatusChange }: EditorProps) {
     }
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLTextAreaElement>) => {
-    const items = e.dataTransfer?.items;
-    if (!items) return;
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].type.indexOf('image') !== -1) {
-        const file = items[i].getAsFile();
-        if (file) {
-          e.preventDefault();
-          uploadImage(file, e.currentTarget.selectionStart);
-          break;
-        }
-      }
-    }
-  };
-
   const wordCount = markdown.split(/\s+/).filter(Boolean).length;
   const charCount = markdown.length;
 
   return (
     <div ref={containerRef} className="flex flex-col h-full overflow-hidden bg-transparent">
+      {/* Cover image upload */}
+      {post && (
+        <CoverImageUpload
+          coverImageUrl={post.coverImageUrl}
+          postId={post.id}
+          onChange={(url) => updatePost(post.id, { coverImageUrl: url })}
+        />
+      )}
+
       {/* Block Editor */}
       <div className="flex-1 overflow-y-auto bg-transparent px-8 py-4 hide-scrollbar">
         <BlockEditor
@@ -213,6 +213,15 @@ export function Editor({ post, onTitleChange, onStatusChange }: EditorProps) {
           }}
         />
       </div>
+      {/* SEO Panel */}
+      {post && (
+        <SeoPanel
+          metaDescription={post.metaDescription || ''}
+          canonicalUrl={post.canonicalUrl || ''}
+          seoImageUrl={post.seoImageUrl || ''}
+          onChange={(field, value) => updatePost(post.id, { [field]: value })}
+        />
+      )}
 
       {/* Footer status bar */}
       <div className="flex items-center justify-between px-8 py-3 border-t border-white/5 text-xs text-gray-500 shrink-0">

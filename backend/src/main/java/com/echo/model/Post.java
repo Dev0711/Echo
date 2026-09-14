@@ -22,6 +22,9 @@ public record Post(
         LocalDateTime lastAutosavedAt,
         Map<String, PlatformStatus> platforms,
         LocalDateTime scheduledAt,
-        Map<String, String> platformOverrides
+        Map<String, String> platformOverrides,
+        String metaDescription,
+        String canonicalUrl,
+        String seoImageUrl
 ) {
 }

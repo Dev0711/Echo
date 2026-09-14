@@ -7,5 +7,9 @@ public record PostAutosaveRequest(
     @NotBlank(message = "Body markdown is required")
     String bodyMarkdown,
     String structuredContent,
-    Map<String, String> platformOverrides
+    Map<String, String> platformOverrides,
+    String coverImageUrl,
+    String metaDescription,
+    String canonicalUrl,
+    String seoImageUrl
 ) {}
