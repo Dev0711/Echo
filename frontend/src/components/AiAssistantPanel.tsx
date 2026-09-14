@@ -44,7 +44,7 @@ interface AiAssistantPanelProps {
   postContent: string;
   isOpen: boolean;
   onClose: () => void;
-  onApply: (text: string) => void;
+  onApply: (text: string, mode?: 'append' | 'replace' | 'replace_intro') => void;
   onAddTags?: (tags: string[]) => void;
 }
 
@@ -173,9 +173,9 @@ export function AiAssistantPanel({ postId, postContent, isOpen, onClose, onApply
                         >{token.text}{' '}</span>
                       ))}
                     </div>
-                    <div className="text-xs text-zinc-500 text-center mb-2">Note: Corrected version will be appended to your post.</div>
+                    <div className="text-xs text-zinc-500 text-center mb-2">Note: Corrected version will replace your post content.</div>
                     <div className="flex gap-2">
-                      <button onClick={() => { onApply(result); onClose(); }} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors flex justify-center items-center gap-2">
+                      <button onClick={() => { onApply(result, 'replace'); onClose(); }} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors flex justify-center items-center gap-2">
                         <Check size={16} /> Apply corrections
                       </button>
                       <button onClick={reset} className="px-4 py-2.5 bg-[#1a1a1a] hover:bg-[#222] text-zinc-300 text-sm font-medium rounded-lg transition-colors border border-white/10">
@@ -238,7 +238,7 @@ export function AiAssistantPanel({ postId, postContent, isOpen, onClose, onApply
                         <p className="text-sm text-zinc-200 leading-relaxed">{result}</p>
                       </div>
                     </div>
-                    <button onClick={() => { onApply(result); onClose(); }} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors flex justify-center items-center gap-2">
+                    <button onClick={() => { onApply(result, 'replace_intro'); onClose(); }} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors flex justify-center items-center gap-2">
                       <Check size={16} /> Use improved version
                     </button>
                   </div>

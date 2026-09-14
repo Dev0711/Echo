@@ -19,6 +19,7 @@ interface EditorProps {
 
 export interface EditorHandle {
   appendMarkdown: (text: string) => void;
+  replaceMarkdown: (text: string) => void;
 }
 
 export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ post, onTitleChange, onStatusChange }: EditorProps, ref) {
@@ -48,6 +49,13 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ po
       setIsDirty(true);
       if (blockEditorRef.current) {
         blockEditorRef.current.appendMarkdown(text);
+      }
+    },
+    replaceMarkdown: (text: string) => {
+      setMarkdown(text);
+      setIsDirty(true);
+      if (blockEditorRef.current) {
+        blockEditorRef.current.replaceMarkdown(text);
       }
     }
   }));

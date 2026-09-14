@@ -453,7 +453,25 @@ export default function DashboardPage() {
             postContent={currentPost.bodyMarkdown || ''}
             isOpen={showAiAssistant}
             onClose={() => setShowAiAssistant(false)}
-            onApply={(text) => { editorRef.current?.appendMarkdown(text); setShowAiAssistant(false); }}
+            onApply={(text, mode = 'append') => {
+              if (mode === 'replace') {
+                editorRef.current?.replaceMarkdown(text);
+              } else if (mode === 'replace_intro') {
+                const currentText = currentPost.bodyMarkdown || '';
+                const parts = currentText.split(/\n\n+/);
+                let newMarkdown = text;
+                if (parts.length > 0 && parts[0].trim().length > 0) {
+                  parts[0] = text;
+                  newMarkdown = parts.join('\n\n');
+                } else {
+                  newMarkdown = text + '\n\n' + currentText;
+                }
+                editorRef.current?.replaceMarkdown(newMarkdown);
+              } else {
+                editorRef.current?.appendMarkdown(text);
+              }
+              setShowAiAssistant(false);
+            }}
             onAddTags={(tags) => {
               const existing = currentPost.tags || [];
               const merged = [...new Set([...existing, ...tags])];
