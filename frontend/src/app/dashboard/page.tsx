@@ -4,13 +4,14 @@ import { useState, useEffect } from 'react';
 import { auth } from '@/lib/auth';
 import { usePostStore } from '@/lib/store';
 import { postsApi } from '@/lib/api';
-import { Editor } from '@/components/Editor';
+import { Editor, EditorHandle } from '@/components/Editor';
 import { PreviewRenderer } from '@/components/PreviewRenderer';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useRef } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from '@/components/ui/dialog';
@@ -110,6 +111,7 @@ export default function DashboardPage() {
 
   const { posts, currentPost, setPosts, addPost, updatePost, setCurrentPost, setLoading, setError, isLoading } = usePostStore();
   const user = auth.getUser();
+  const editorRef = useRef<EditorHandle>(null);
 
   useEffect(() => {
     if (!auth.isAuthenticated()) { window.location.href = '/login'; return; }
@@ -428,11 +430,11 @@ export default function DashboardPage() {
               )}
               {/* Editor fills remaining space */}
               <div className="flex-1 min-h-0 overflow-hidden relative">
-                <div className={`absolute inset-0 bg-[#0f0f0f] z-10 ${showPreview ? 'block' : 'hidden'}`}>
+                <div className={`absolute inset-0 z-10 ${showPreview ? 'block' : 'hidden'}`}>
                   <PreviewPanelWrapper post={currentPost} />
                 </div>
                 <div className={`absolute inset-0 ${!showPreview ? 'block' : 'hidden'}`}>
-                  <Editor post={currentPost} onTitleChange={handleTitleChange} onStatusChange={handleStatusChange} />
+                  <Editor ref={editorRef} post={currentPost} onTitleChange={handleTitleChange} onStatusChange={handleStatusChange} />
                 </div>
               </div>
             </div>
@@ -448,9 +450,15 @@ export default function DashboardPage() {
         <>
           <AiAssistantPanel
             postId={currentPost.id}
+            postContent={currentPost.bodyMarkdown || ''}
             isOpen={showAiAssistant}
             onClose={() => setShowAiAssistant(false)}
-            onApply={(text) => { /* Appended text handled by user copy */ }}
+            onApply={(text) => { editorRef.current?.appendMarkdown(text); setShowAiAssistant(false); }}
+            onAddTags={(tags) => {
+              const existing = currentPost.tags || [];
+              const merged = [...new Set([...existing, ...tags])];
+              updatePost(currentPost.id, { tags: merged });
+            }}
           />
           <VersionHistoryPanel
             postId={currentPost.id}

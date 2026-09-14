@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import dynamic from 'next/dynamic';
+import type { BlockEditorHandle } from './BlockEditor';
 const BlockEditor = dynamic(() => import('./BlockEditor'), { ssr: false });
 import { usePostStore } from '@/lib/store';
 import { postsApi } from '@/lib/api';
@@ -16,9 +17,11 @@ interface EditorProps {
   onStatusChange: (status: 'DRAFT' | 'READY' | 'PUBLISHED') => void;
 }
 
+export interface EditorHandle {
+  appendMarkdown: (text: string) => void;
+}
 
-
-export function Editor({ post, onTitleChange, onStatusChange }: EditorProps) {
+export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ post, onTitleChange, onStatusChange }: EditorProps, ref) {
   const [markdown, setMarkdown] = useState('');
   const [structuredContent, setStructuredContent] = useState('');
   const [isDirty, setIsDirty] = useState(false);
@@ -31,12 +34,24 @@ export function Editor({ post, onTitleChange, onStatusChange }: EditorProps) {
   const lastAutosavedContentRef = useRef('');
   const lastAutosavedTitleRef = useRef('');
   const isMountedRef = useRef(true);
+  const blockEditorRef = useRef<BlockEditorHandle>(null);
   const { updatePost } = usePostStore();
 
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
   }, []);
+
+  useImperativeHandle(ref, () => ({
+    appendMarkdown: (text: string) => {
+      setMarkdown(prev => prev + (prev ? '\n\n' : '') + text);
+      setIsDirty(true);
+      if (blockEditorRef.current) {
+        blockEditorRef.current.appendMarkdown(text);
+      }
+    }
+  }));
+
 
   // Dynamically compute the editor height to fill the container
   useEffect(() => {
@@ -205,6 +220,7 @@ export function Editor({ post, onTitleChange, onStatusChange }: EditorProps) {
       {/* Block Editor */}
       <div className="flex-1 overflow-y-auto bg-transparent px-8 py-4 hide-scrollbar">
         <BlockEditor
+          editorRef={blockEditorRef}
           structuredContent={structuredContent}
           markdownContent={markdown}
           onChange={(astJson, mdOut) => {
@@ -245,4 +261,4 @@ export function Editor({ post, onTitleChange, onStatusChange }: EditorProps) {
       </div>
     </div>
   );
-}
+});

@@ -20,6 +20,9 @@ public class GeminiService {
     @Value("${echo.gemini.api-key:}")
     private String apiKey;
 
+    @Value("${echo.gemini.model:gemini-3.6-flash}")
+    private String model;
+
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -30,7 +33,7 @@ public class GeminiService {
 
         String prompt = buildPrompt(action, content);
 
-        String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey;
+        String url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + apiKey;
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -57,6 +60,15 @@ public class GeminiService {
                 }
             }
             return "Could not extract response from AI.";
+        } catch (org.springframework.web.client.HttpStatusCodeException e) {
+            try {
+                JsonNode errRoot = objectMapper.readTree(e.getResponseBodyAsString());
+                String errMsg = errRoot.path("error").path("message").asText();
+                if (!errMsg.isEmpty()) {
+                    return "Gemini API Error: " + errMsg;
+                }
+            } catch (Exception ignored) {}
+            return "Gemini API Error (" + e.getStatusCode() + "): " + e.getResponseBodyAsString();
         } catch (Exception e) {
             return "Error calling AI assistant: " + e.getMessage();
         }
