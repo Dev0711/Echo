@@ -216,38 +216,45 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ po
 
   return (
     <div ref={containerRef} className="flex flex-col h-full overflow-hidden bg-transparent">
-      {/* Cover image upload */}
-      {post && (
-        <CoverImageUpload
-          coverImageUrl={post.coverImageUrl}
-          postId={post.id}
-          onChange={(url) => updatePost(post.id, { coverImageUrl: url })}
-        />
-      )}
 
-      {/* Block Editor */}
-      <div className="flex-1 overflow-y-auto bg-transparent px-8 py-4 hide-scrollbar">
-        <BlockEditor
-          editorRef={blockEditorRef}
-          structuredContent={structuredContent}
-          markdownContent={markdown}
-          onChange={(astJson, mdOut) => {
-            setStructuredContent(astJson);
-            setMarkdown(mdOut);
-          }}
-        />
+      {/* Single scrollable content area: cover + editor + SEO all scroll together */}
+      <div className="flex-1 overflow-y-auto bg-transparent hide-scrollbar">
+        {/* Cover image upload — sits at top, scrolls away with content */}
+        {post && (
+          <div className="px-8 pt-4">
+            <CoverImageUpload
+              coverImageUrl={post.coverImageUrl}
+              postId={post.id}
+              onChange={(url) => updatePost(post.id, { coverImageUrl: url })}
+            />
+          </div>
+        )}
+
+        {/* Block Editor */}
+        <div className="px-8 py-4">
+          <BlockEditor
+            editorRef={blockEditorRef}
+            structuredContent={structuredContent}
+            markdownContent={markdown}
+            onChange={(astJson, mdOut) => {
+              setStructuredContent(astJson);
+              setMarkdown(mdOut);
+            }}
+          />
+        </div>
+
+        {/* SEO Panel */}
+        {post && (
+          <SeoPanel
+            metaDescription={post.metaDescription || ''}
+            canonicalUrl={post.canonicalUrl || ''}
+            seoImageUrl={post.seoImageUrl || ''}
+            onChange={(field, value) => updatePost(post.id, { [field]: value })}
+          />
+        )}
       </div>
-      {/* SEO Panel */}
-      {post && (
-        <SeoPanel
-          metaDescription={post.metaDescription || ''}
-          canonicalUrl={post.canonicalUrl || ''}
-          seoImageUrl={post.seoImageUrl || ''}
-          onChange={(field, value) => updatePost(post.id, { [field]: value })}
-        />
-      )}
 
-      {/* Footer status bar */}
+      {/* Footer status bar — always pinned at bottom */}
       <div className="flex items-center justify-between px-8 py-3 border-t border-white/5 text-xs text-gray-500 shrink-0">
         <div className="flex items-center gap-4">
           <span>{wordCount} words</span>

@@ -54,7 +54,7 @@ export function CoverImageUpload({ coverImageUrl, onChange }: CoverImageUploadPr
   };
 
   return (
-    <div className="px-8 pb-2">
+    <div>
       {coverImageUrl ? (
         <div className="relative group rounded-xl overflow-hidden h-48 mb-1">
           {/* eslint-disable-next-line @next/next/no-img-element */}

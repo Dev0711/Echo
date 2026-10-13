@@ -14,6 +14,39 @@
   min-height: 400px;
 }
 
+/* ── Heading size overrides (Notion-style compact) ── */
+/*
+  BlockNote structure: .bn-block[data-content-type="heading"][data-level="1"] > .bn-block-content > h1
+  But it also sets: .bn-default-styles h1 { font-size: inherit }
+  So the huge size comes from browser UA. We must target the block wrapper.
+*/
+.bn-block-content[data-content-type="heading"][data-level="1"],
+.bn-block-content[data-content-type="heading"][data-level="1"] h1,
+.bn-block-content[data-content-type="heading"][data-level="1"] p,
+.bn-editor [data-level="1"] .bn-inline-content {
+  font-size: 1.4rem !important;
+  font-weight: 700 !important;
+  line-height: 1.3 !important;
+}
+
+.bn-block-content[data-content-type="heading"][data-level="2"],
+.bn-block-content[data-content-type="heading"][data-level="2"] h2,
+.bn-block-content[data-content-type="heading"][data-level="2"] p,
+.bn-editor [data-level="2"] .bn-inline-content {
+  font-size: 1.2rem !important;
+  font-weight: 600 !important;
+  line-height: 1.35 !important;
+}
+
+.bn-block-content[data-content-type="heading"][data-level="3"],
+.bn-block-content[data-content-type="heading"][data-level="3"] h3,
+.bn-block-content[data-content-type="heading"][data-level="3"] p,
+.bn-editor [data-level="3"] .bn-inline-content {
+  font-size: 1.05rem !important;
+  font-weight: 600 !important;
+  line-height: 1.4 !important;
+}
+
 /* Custom UI overrides for BlockNote Mantine dark theme */
 .bn-menu-dropdown {
   background-color: #1a1a1a !important;

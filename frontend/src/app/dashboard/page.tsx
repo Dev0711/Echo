@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { auth } from '@/lib/auth';
 import { usePostStore } from '@/lib/store';
 import { postsApi } from '@/lib/api';
@@ -21,9 +21,9 @@ import {
 import {
   Plus, Eye, EyeOff, Send, Loader2, PenTool,
   Settings, Twitter, Linkedin, Globe, FileText,
-  CheckCircle, AlertCircle, ChevronDown, ChevronUp,
+  CheckCircle, AlertCircle, ChevronLeft, ChevronRight,
   BookOpen, Clock, Bell, Maximize2, Minimize2, BarChart2,
-  Sparkles, History, User
+  Sparkles, History, User, Calendar
 } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { TemplatePickerModal } from '@/components/TemplatePickerModal';
@@ -88,8 +88,23 @@ export default function DashboardPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [publishResult, setPublishResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  // Publish pane state
-  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<string>>(new Set(['twitter']));
+  // Sidebar collapse — always false on SSR to avoid hydration mismatch, then sync from localStorage
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  useEffect(() => {
+    const stored = localStorage.getItem('echo_sidebar_collapsed');
+    if (stored === 'true') setSidebarCollapsed(true);
+  }, []);
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('echo_sidebar_collapsed', String(next));
+      return next;
+    });
+  }, []);
+
+  // Publish dialog state
+  const [showPublishDialog, setShowPublishDialog] = useState(false);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<string>>(new Set());
   const [platformStatuses, setPlatformStatuses] = useState<Record<string, any>>({});
   const [showSettingsDialog, setShowSettingsDialog] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -199,93 +214,141 @@ export default function DashboardPage() {
 
   const recentDrafts = posts.filter(p => p.status !== 'PUBLISHED').slice(0, 6);
 
+  const sidebarWidth = sidebarCollapsed ? 'w-[52px]' : 'w-[200px]';
+
   return (
     <TooltipProvider delayDuration={400}>
     <div className="h-screen w-screen flex overflow-hidden bg-[#0f0f0f]">
 
       {/* ── Left Sidebar ──────────────────────────────────────────────────── */}
       {!isFullScreen && (
-        <aside className="w-[200px] flex flex-col shrink-0 surface-sidebar">
+        <aside className={`${sidebarWidth} flex flex-col shrink-0 surface-sidebar relative transition-all duration-200`}>
           {/* Wordmark */}
-          <div className="px-4 pt-5 pb-4 flex items-center gap-2">
-            <Logo className="w-5 h-5 text-[#f2f2f2]" />
-            <span className="text-[14px] font-semibold text-[#f2f2f2] tracking-tight">Echo</span>
+          <div className={`px-3 pt-5 pb-4 flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-2'}`}>
+            <Logo className="w-5 h-5 text-[#f2f2f2] shrink-0" />
+            {!sidebarCollapsed && <span className="text-[14px] font-semibold text-[#f2f2f2] tracking-tight">Echo</span>}
           </div>
 
           {/* Primary nav */}
-          <nav className="px-2 space-y-0.5 mb-5">
+          <nav className="px-1.5 space-y-0.5 mb-5">
             {[
               { id: 'DRAFT' as const, label: 'Drafts', icon: PenTool },
               { id: 'PUBLISHED' as const, label: 'Published', icon: Globe },
               { id: 'ANALYTICS' as const, label: 'Analytics', icon: BarChart2 },
             ].map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                onClick={() => setCurrentView(id)}
-                className={`nav-item w-full rounded-sm ${currentView === id ? 'nav-active !text-[#f2f2f2]' : ''}`}
-              >
-                <Icon size={13} />
-                {label}
-              </button>
+              <Tooltip key={id}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setCurrentView(id)}
+                    className={`nav-item w-full rounded-sm ${sidebarCollapsed ? 'justify-center px-0' : ''} ${currentView === id ? 'nav-active !text-[#f2f2f2]' : ''}`}
+                  >
+                    <Icon size={13} />
+                    {!sidebarCollapsed && label}
+                  </button>
+                </TooltipTrigger>
+                {sidebarCollapsed && <TooltipContent side="right">{label}</TooltipContent>}
+              </Tooltip>
             ))}
           </nav>
 
           {/* Divider */}
-          <div className="mx-4 divider mb-4" />
+          {!sidebarCollapsed && <div className="mx-4 divider mb-4" />}
 
           {/* New draft */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsCreating(true)}
-            className="mx-2 mb-4 w-[calc(100%-16px)] justify-start"
-          >
-            <Plus size={12} /> New draft
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsCreating(true)}
+                className={`mx-1.5 mb-4 ${sidebarCollapsed ? 'w-8 h-8 p-0 justify-center' : 'w-[calc(100%-12px)] justify-start'}`}
+              >
+                <Plus size={12} />
+                {!sidebarCollapsed && 'New draft'}
+              </Button>
+            </TooltipTrigger>
+            {sidebarCollapsed && <TooltipContent side="right">New draft</TooltipContent>}
+          </Tooltip>
 
-          {/* Recent drafts */}
-          <ScrollArea className="flex-1 px-2 pb-4">
-            <p className="label-xs px-2 mb-2">Recent</p>
-            {recentDrafts.length === 0 ? (
-              <p className="text-[11px] text-[#52525b] px-2">No drafts yet</p>
-            ) : (
-              <ul className="space-y-0.5">
-                {recentDrafts.map((post: any) => {
-                  const isActive = currentPost?.id === post.id;
-                  return (
-                    <li key={post.id}>
-                      <button
-                        onClick={() => { setCurrentPost(post); setShowPreview(false); setPublishResult(null); setCurrentView('DRAFT'); }}
-                        className={`w-full text-left px-2 py-1.5 rounded-sm text-[12px] truncate transition-colors ${
-                          isActive ? 'text-[#f2f2f2] bg-white/[0.05]' : 'text-[#71717a] hover:text-[#d4d4d4]'
-                        }`}
-                      >
-                        {post.title || 'Untitled'}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </ScrollArea>
+          {/* Recent drafts — hidden when collapsed */}
+          {!sidebarCollapsed && (
+            <ScrollArea className="flex-1 px-2 pb-4">
+              <p className="label-xs px-2 mb-2">Recent</p>
+              {recentDrafts.length === 0 ? (
+                <p className="text-[11px] text-[#52525b] px-2">No drafts yet</p>
+              ) : (
+                <ul className="space-y-0.5">
+                  {recentDrafts.map((post: any) => {
+                    const isActive = currentPost?.id === post.id;
+                    return (
+                      <li key={post.id}>
+                        <button
+                          onClick={() => { setCurrentPost(post); setShowPreview(false); setPublishResult(null); setCurrentView('DRAFT'); }}
+                          className={`w-full text-left px-2 py-1.5 rounded-sm text-[12px] truncate transition-colors ${
+                            isActive ? 'text-[#f2f2f2] bg-white/[0.05]' : 'text-[#71717a] hover:text-[#d4d4d4]'
+                          }`}
+                        >
+                          {post.title || 'Untitled'}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </ScrollArea>
+          )}
+
+          {/* Spacer when collapsed */}
+          {sidebarCollapsed && <div className="flex-1" />}
 
           {/* User footer */}
-          <div className="mx-4 divider mb-3" />
-          <div className="px-3 pb-4 flex items-center gap-2">
-            <div suppressHydrationWarning className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-[10px] font-semibold shrink-0">
-              {user?.name?.[0]?.toUpperCase() ?? '?'}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p suppressHydrationWarning className="text-[11px] text-[#d4d4d4] truncate font-medium">{user?.name ?? 'Account'}</p>
-            </div>
-            <NotificationBell onClick={() => setShowNotifications(true)} />
-            <a href="/profile" className="p-2 rounded-lg hover:bg-white/8 text-zinc-500 hover:text-white transition-colors">
-              <User size={14} />
-            </a>
-            <a href="/settings" className="text-[#52525b] hover:text-[#d4d4d4] transition-colors">
-              <Settings size={12} />
-            </a>
+          <div className="divider mx-3 mb-3" />
+          <div className={`px-1.5 pb-4 flex flex-col ${sidebarCollapsed ? 'items-center gap-2' : 'gap-2'}`}>
+            {sidebarCollapsed ? (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button onClick={() => setShowNotifications(true)} className="p-1.5 rounded-lg hover:bg-white/8 text-zinc-500 hover:text-white transition-colors">
+                      <Bell size={13} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Notifications</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <a href="/settings" className="p-1.5 rounded-lg hover:bg-white/8 text-zinc-500 hover:text-white transition-colors">
+                      <Settings size={13} />
+                    </a>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Settings</TooltipContent>
+                </Tooltip>
+              </>
+            ) : (
+              <div className="flex items-center gap-2 px-1.5">
+                <div suppressHydrationWarning className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-white text-[10px] font-semibold shrink-0">
+                  {user?.name?.[0]?.toUpperCase() ?? '?'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p suppressHydrationWarning className="text-[11px] text-[#d4d4d4] truncate font-medium">{user?.name ?? 'Account'}</p>
+                </div>
+                <NotificationBell onClick={() => setShowNotifications(true)} />
+                <a href="/profile" className="p-1.5 rounded-lg hover:bg-white/8 text-zinc-500 hover:text-white transition-colors">
+                  <User size={13} />
+                </a>
+                <a href="/settings" className="text-[#52525b] hover:text-[#d4d4d4] transition-colors">
+                  <Settings size={12} />
+                </a>
+              </div>
+            )}
           </div>
+
+          {/* Collapse toggle button */}
+          <button
+            onClick={toggleSidebar}
+            className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-[#1f1f1f] border border-[#2e2e2e] flex items-center justify-center text-[#71717a] hover:text-[#f2f2f2] hover:bg-[#2a2a2a] transition-all z-10 shadow-md"
+          >
+            {sidebarCollapsed ? <ChevronRight size={11} /> : <ChevronLeft size={11} />}
+          </button>
         </aside>
       )}
 
@@ -366,13 +429,8 @@ export default function DashboardPage() {
                     <TooltipContent>{isFullScreen ? 'Exit focus mode' : 'Focus mode'}</TooltipContent>
                   </Tooltip>
                   <Separator orientation="vertical" className="h-4" />
-                  <Button
-                    onClick={handlePublish}
-                    disabled={selectedPlatforms.size === 0 || isPublishing}
-                    size="sm"
-                  >
-                    {isPublishing ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-                    {isScheduling && scheduledAt ? 'Schedule' : 'Publish Now'}
+                  <Button size="sm" onClick={() => setShowPublishDialog(true)}>
+                    <Send size={12} /> Publish
                   </Button>
                 </>
               )}
@@ -489,75 +547,95 @@ export default function DashboardPage() {
         </>
       )}
 
-      {/* ── Right Panel: Publish ──────────────────────────────────────────── */}
-      {currentPost && !isFullScreen && !showPreview && currentView === 'DRAFT' && (
-        <aside className="w-[240px] flex flex-col shrink-0 surface-right">
-          <div className="px-4 pt-4 pb-3" style={{ borderBottom: '1px solid #1f1f1f' }}>
-            <p className="label-xs">Publish to Platforms</p>
-          </div>
+      {/* ── Publish Dialog ────────────────────────────────────────────────── */}
+      <Dialog open={showPublishDialog} onOpenChange={(open) => { setShowPublishDialog(open); if (!open) { setIsScheduling(false); setScheduledAt(''); setSelectedPlatforms(new Set()); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send size={15} className="text-indigo-400" /> Publish Post
+            </DialogTitle>
+            <DialogDescription>Choose where to publish{currentPost ? ` "${currentPost.title || 'Untitled'}"` : ''}.</DialogDescription>
+          </DialogHeader>
 
-          <ScrollArea className="flex-1 px-3 py-3">
-            <div className="space-y-0.5">
+          {/* Platform grid */}
+          <div className="grid grid-cols-1 gap-1.5 my-2">
             {PLATFORMS.map(platform => {
               const isOn = selectedPlatforms.has(platform.id);
               const Icon = platform.icon;
-
+              const isConnected = !!platformStatuses[platform.id]?.connected;
               return (
-                <div key={platform.id} className={`platform-row ${isOn ? 'platform-row-active' : ''}`} onClick={() => togglePlatform(platform.id)}>
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-[22px] h-[22px] rounded bg-[#1f1f1f] flex items-center justify-center shrink-0">
-                      <Icon size={12} className={isOn ? 'text-indigo-400' : 'text-[#71717a]'} />
+                <button
+                  key={platform.id}
+                  onClick={() => {
+                    if (!isConnected && !isOn) { setShowPublishDialog(false); setShowSettingsDialog(platform.id); return; }
+                    setSelectedPlatforms(prev => { const n = new Set(prev); isOn ? n.delete(platform.id) : n.add(platform.id); return n; });
+                  }}
+                  className={`flex items-center justify-between px-3 py-2.5 rounded-lg border transition-all ${
+                    isOn ? 'border-indigo-500/50 bg-indigo-500/10' : 'border-[#252525] bg-[#141414] hover:border-[#3a3a3a]'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-7 h-7 rounded-md flex items-center justify-center ${ isOn ? 'bg-indigo-500/20' : 'bg-[#1f1f1f]' }`}>
+                      <Icon size={14} className={isOn ? 'text-indigo-400' : 'text-[#71717a]'} />
                     </div>
-                    <span className={`text-[13px] truncate ${isOn ? 'text-[#f2f2f2]' : 'text-[#71717a]'}`}>
-                      {platform.name}
-                    </span>
+                    <div className="text-left">
+                      <p className={`text-[13px] font-medium ${isOn ? 'text-[#f2f2f2]' : 'text-[#a1a1aa]'}`}>{platform.name}</p>
+                      {!isConnected && <p className="text-[10px] text-amber-500/70">Not connected — click to set up</p>}
+                    </div>
                   </div>
-                  <Toggle checked={isOn} onChange={() => togglePlatform(platform.id)} />
-                </div>
+                  <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
+                    isOn ? 'bg-indigo-500 border-indigo-500' : 'border-[#3a3a3a]'
+                  }`}>
+                    {isOn && <CheckCircle size={10} className="text-white" />}
+                  </div>
+                </button>
               );
             })}
-            </div>
-          </ScrollArea>
-
-          {/* Scheduling */}
-          <div className="px-3 pb-3" style={{ borderTop: '1px solid #1f1f1f' }}>
-            <div className="platform-row mt-2" onClick={() => setIsScheduling(!isScheduling)}>
-              <div className="flex items-center gap-2.5">
-                <div className="w-[22px] h-[22px] rounded bg-[#1f1f1f] flex items-center justify-center shrink-0">
-                  <Clock size={12} className={isScheduling ? 'text-indigo-400' : 'text-[#71717a]'} />
-                </div>
-                <div>
-                  <p className={`text-[13px] ${isScheduling ? 'text-[#f2f2f2]' : 'text-[#71717a]'}`}>Schedule Post</p>
-                  {isScheduling && scheduledAt && (
-                    <p className="text-[10px] text-[#52525b] mt-0.5">{new Date(scheduledAt).toLocaleString()}</p>
-                  )}
-                </div>
-              </div>
-              <Toggle checked={isScheduling} onChange={() => setIsScheduling(!isScheduling)} />
-            </div>
-
-            {isScheduling && (
-              <input
-                type="datetime-local"
-                value={scheduledAt}
-                onChange={(e) => setScheduledAt(e.target.value)}
-                className="w-full mt-2 px-2.5 py-1.5 bg-[#1a1a1a] border border-[#252525] rounded-md text-[12px] text-[#d4d4d4] focus:outline-none focus:border-indigo-500"
-              />
-            )}
-
-            <div className="mt-3 flex gap-2">
-              <Button variant="outline" size="sm" className="flex-1">Save Draft</Button>
-              <Button
-                size="sm" className="flex-1"
-                onClick={handlePublish}
-                disabled={selectedPlatforms.size === 0 || isPublishing}
-              >
-                {isPublishing ? '...' : isScheduling && scheduledAt ? 'Schedule' : 'Publish'}
-              </Button>
-            </div>
           </div>
-        </aside>
-      )}
+
+          {/* Schedule toggle */}
+          <div className="border border-[#1f1f1f] rounded-lg overflow-hidden">
+            <button
+              onClick={() => setIsScheduling(p => !p)}
+              className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-white/[0.02] transition-colors"
+            >
+              <div className="flex items-center gap-2.5">
+                <Calendar size={14} className={isScheduling ? 'text-indigo-400' : 'text-[#71717a]'} />
+                <span className={`text-[13px] font-medium ${isScheduling ? 'text-[#f2f2f2]' : 'text-[#a1a1aa]'}`}>Schedule for later</span>
+              </div>
+              <Switch checked={isScheduling} onCheckedChange={setIsScheduling} />
+            </button>
+            {isScheduling && (
+              <div className="px-3 pb-3 border-t border-[#1f1f1f]">
+                <input
+                  type="datetime-local"
+                  value={scheduledAt}
+                  onChange={(e) => setScheduledAt(e.target.value)}
+                  className="w-full mt-2.5 px-2.5 py-1.5 bg-[#1a1a1a] border border-[#252525] rounded-md text-[12px] text-[#d4d4d4] focus:outline-none focus:border-indigo-500"
+                />
+                {scheduledAt && (
+                  <p className="text-[11px] text-[#52525b] mt-1.5">
+                    Scheduled for {new Date(scheduledAt).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="mt-2">
+            <Button variant="outline" size="sm" onClick={() => setShowPublishDialog(false)}>Cancel</Button>
+            <Button
+              size="sm"
+              onClick={() => { handlePublish(); setShowPublishDialog(false); }}
+              disabled={selectedPlatforms.size === 0 || isPublishing}
+              className="gap-1.5"
+            >
+              {isPublishing ? <Loader2 size={12} className="animate-spin" /> : isScheduling && scheduledAt ? <Calendar size={12} /> : <Send size={12} />}
+              {isScheduling && scheduledAt ? `Schedule` : 'Publish Now'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Create Draft Dialog ─────────────────────────────────────────────── */}
       <Dialog open={isCreating} onOpenChange={setIsCreating}>
