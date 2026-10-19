@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Sparkles, X, Copy, Check, Loader2, ChevronRight, Tag, ArrowRight, Quote, Wand2, Plus } from 'lucide-react';
 
 // Simple LCS-based word diff
@@ -42,19 +42,35 @@ const ACTIONS = [
 interface AiAssistantPanelProps {
   postId: string;
   postContent: string;
+  selectedText?: string;
   isOpen: boolean;
   onClose: () => void;
-  onApply: (text: string, mode?: 'append' | 'replace' | 'replace_intro') => void;
+  onApply: (text: string, mode?: 'append' | 'replace' | 'replace_intro' | 'replace_selection') => void;
   onAddTags?: (tags: string[]) => void;
 }
 
-export function AiAssistantPanel({ postId, postContent, isOpen, onClose, onApply, onAddTags }: AiAssistantPanelProps) {
+export function AiAssistantPanel({ postId, postContent, selectedText, isOpen, onClose, onApply, onAddTags }: AiAssistantPanelProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
+  const [usedSelection, setUsedSelection] = useState(false);
+
+  const hasSelection = !!selectedText && selectedText.trim().length > 0;
+
+  // Every time the panel is opened, start from a clean slate. Without this the
+  // previous result (and "usedSelection" flag) survived the close, so reopening
+  // showed the old correction and applying it again re-inserted the same text.
+  useEffect(() => {
+    if (!isOpen) return;
+    setActiveAction(null);
+    setResult(null);
+    setError(null);
+    setSelectedTags(new Set());
+    setUsedSelection(false);
+  }, [isOpen]);
 
   const runAction = async (actionId: string) => {
     setIsLoading(true);
@@ -62,12 +78,21 @@ export function AiAssistantPanel({ postId, postContent, isOpen, onClose, onApply
     setError(null);
     setActiveAction(actionId);
     setSelectedTags(new Set());
+
+    // Grammar fixes can be scoped to the user's current selection. Other actions
+    // (tags, TL;DR, intro rewrite) need the whole document for context.
+    const scopeToSelection = actionId === 'fix_grammar' && hasSelection;
+    setUsedSelection(scopeToSelection);
+
     try {
       const token = localStorage.getItem('echo_token');
       const res = await fetch(`http://localhost:8080/api/posts/${postId}/ai-assist`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action: actionId }),
+        body: JSON.stringify({
+          action: actionId,
+          ...(scopeToSelection ? { content: selectedText } : {}),
+        }),
       });
       if (!res.ok) throw new Error('Request failed');
       const data = await res.json();
@@ -96,6 +121,7 @@ export function AiAssistantPanel({ postId, postContent, isOpen, onClose, onApply
     setActiveAction(null);
     setResult(null);
     setError(null);
+    setUsedSelection(false);
   };
 
   if (!isOpen) return null;
@@ -123,13 +149,24 @@ export function AiAssistantPanel({ postId, postContent, isOpen, onClose, onApply
           {!activeAction ? (
             <div className="p-5">
               <p className="text-sm font-medium text-zinc-300 mb-4">Choose an action</p>
+              {hasSelection && (
+                <div className="mb-4 px-3 py-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 leading-relaxed">
+                  Fix Grammar will only apply to your selected text
+                  <span className="text-emerald-500/70"> ({selectedText!.length} characters)</span>.
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 {ACTIONS.map((action) => (
                   <button
                     key={action.id}
                     onClick={() => runAction(action.id)}
-                    className="bg-[#111] hover:bg-[#161616] border border-white/8 hover:border-white/20 rounded-xl p-4 cursor-pointer transition-all flex flex-col items-start text-left group"
+                    className="bg-[#111] hover:bg-[#161616] border border-white/8 hover:border-white/20 rounded-xl p-4 cursor-pointer transition-all flex flex-col items-start text-left group relative"
                   >
+                    {action.id === 'fix_grammar' && hasSelection && (
+                      <span className="absolute top-2 right-2 text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-medium">
+                        selection
+                      </span>
+                    )}
                     <span className="text-2xl mb-2 group-hover:scale-110 transition-transform">{action.icon}</span>
                     <span className="text-sm font-medium text-zinc-200 mb-1">{action.label}</span>
                     <span className="text-xs text-zinc-500">{action.description}</span>
@@ -146,6 +183,7 @@ export function AiAssistantPanel({ postId, postContent, isOpen, onClose, onApply
                 <div className="w-px h-3 bg-white/10" />
                 <span className="text-xs font-medium text-zinc-400">
                   {ACTIONS.find(a => a.id === activeAction)?.label}
+                  {usedSelection && <span className="text-emerald-400"> · selection</span>}
                 </span>
               </div>
 
@@ -162,7 +200,7 @@ export function AiAssistantPanel({ postId, postContent, isOpen, onClose, onApply
                 ) : result && activeAction === 'fix_grammar' ? (
                   <div className="flex flex-col gap-4">
                     <div className="bg-[#111] border border-white/5 rounded-xl p-4 text-sm leading-loose">
-                      {wordDiff(postContent.substring(0, 500), result).map((token, i) => (
+                      {wordDiff(usedSelection ? (selectedText ?? '') : postContent.substring(0, 500), result).map((token, i) => (
                         <span
                           key={i}
                           className={
@@ -173,9 +211,13 @@ export function AiAssistantPanel({ postId, postContent, isOpen, onClose, onApply
                         >{token.text}{' '}</span>
                       ))}
                     </div>
-                    <div className="text-xs text-zinc-500 text-center mb-2">Note: Corrected version will replace your post content.</div>
+                    <div className="text-xs text-zinc-500 text-center mb-2">
+                      {usedSelection
+                        ? 'The corrected text will replace only your selection.'
+                        : 'Note: Corrected version will replace your post content.'}
+                    </div>
                     <div className="flex gap-2">
-                      <button onClick={() => { onApply(result, 'replace'); onClose(); }} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors flex justify-center items-center gap-2">
+                      <button onClick={() => { onApply(result, usedSelection ? 'replace_selection' : 'replace'); onClose(); }} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors flex justify-center items-center gap-2">
                         <Check size={16} /> Apply corrections
                       </button>
                       <button onClick={reset} className="px-4 py-2.5 bg-[#1a1a1a] hover:bg-[#222] text-zinc-300 text-sm font-medium rounded-lg transition-colors border border-white/10">

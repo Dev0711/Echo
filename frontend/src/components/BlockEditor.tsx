@@ -7,9 +7,17 @@ import "@blocknote/mantine/style.css";
 import { useEffect, useState, useMemo } from "react";
 import "./blocknote-dark.css";
 
+export interface EditorSelection {
+  from: number;
+  to: number;
+  text: string;
+}
+
 export interface BlockEditorHandle {
   appendMarkdown: (text: string) => Promise<void>;
   replaceMarkdown: (text: string) => Promise<void>;
+  getSelection: () => EditorSelection | null;
+  replaceRange: (from: number, to: number, text: string) => Promise<void>;
 }
 
 interface BlockEditorProps {
@@ -74,6 +82,23 @@ export default function BlockEditor({ structuredContent, markdownContent, onChan
         replaceMarkdown: async (text: string) => {
           const blocks = await editor.tryParseMarkdownToBlocks(text);
           editor.replaceBlocks(editor.document, blocks);
+          const astJson = JSON.stringify(editor.document);
+          const mdOut = await editor.blocksToMarkdownLossy(editor.document);
+          onChange(astJson, mdOut);
+        },
+        getSelection: () => {
+          const state = editor.prosemirrorState;
+          const { from, to } = state.selection;
+          if (from === to) return null;
+          // Use explicit block separators so multi-paragraph selections don't
+          // arrive at the AI with words glued together.
+          const text = state.doc.textBetween(from, to, "\n\n", " ");
+          return text.trim() ? { from, to, text } : null;
+        },
+        replaceRange: async (from: number, to: number, text: string) => {
+          editor.transact((tr) => {
+            tr.insertText(text, from, to);
+          });
           const astJson = JSON.stringify(editor.document);
           const mdOut = await editor.blocksToMarkdownLossy(editor.document);
           onChange(astJson, mdOut);

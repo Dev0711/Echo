@@ -79,7 +79,7 @@ public class GeminiService {
             case "improve_intro" -> "Improve the introduction of this blog post. Return only the improved introduction paragraph:\n\n" + (content.length() > 500 ? content.substring(0, 500) : content);
             case "suggest_tags" -> "Suggest 5 SEO-friendly tags for this blog post. Return only a comma-separated list:\n\n" + content;
             case "summarize" -> "Write a 2-sentence TL;DR summary for this blog post:\n\n" + content;
-            case "fix_grammar" -> "Fix grammar and spelling in this text. Return only the corrected text:\n\n" + content;
+            case "fix_grammar" -> "Fix grammar and spelling in the following text. Preserve the Markdown formatting, line breaks, and tone. Return only the corrected text, without explanations or code fences:\n\n" + content;
             default -> content;
         };
     }

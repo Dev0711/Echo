@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import dynamic from 'next/dynamic';
-import type { BlockEditorHandle } from './BlockEditor';
+import type { BlockEditorHandle, EditorSelection } from './BlockEditor';
 const BlockEditor = dynamic(() => import('./BlockEditor'), { ssr: false });
 import { usePostStore } from '@/lib/store';
 import { postsApi } from '@/lib/api';
@@ -20,12 +20,15 @@ interface EditorProps {
 export interface EditorHandle {
   appendMarkdown: (text: string) => void;
   replaceMarkdown: (text: string) => void;
+  getSelection: () => EditorSelection | null;
+  replaceRange: (from: number, to: number, text: string) => Promise<void>;
 }
 
 export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ post, onTitleChange, onStatusChange }: EditorProps, ref) {
   const [markdown, setMarkdown] = useState('');
   const [structuredContent, setStructuredContent] = useState('');
   const [isDirty, setIsDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [tagInput, setTagInput] = useState('');
@@ -57,6 +60,14 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ po
       if (blockEditorRef.current) {
         blockEditorRef.current.replaceMarkdown(text);
       }
+    },
+    getSelection: () => {
+      return blockEditorRef.current?.getSelection() ?? null;
+    },
+    replaceRange: (from: number, to: number, text: string) => {
+      const handle = blockEditorRef.current;
+      if (!handle) return Promise.resolve();
+      return handle.replaceRange(from, to, text);
     }
   }));
 
@@ -90,6 +101,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ po
 
   const triggerAutosave = useCallback(() => {
     if (!post || !isDirty) return;
+    setIsSaving(true);
     const request: PostAutosaveRequest = { 
       title: post.title,
       bodyMarkdown: markdown,
@@ -121,6 +133,9 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ po
         if (isMountedRef.current) {
           setSaveError(error.response?.data?.message || 'Autosave failed');
         }
+      })
+      .finally(() => {
+        if (isMountedRef.current) setIsSaving(false);
       });
   }, [post, markdown, structuredContent, isDirty, updatePost]);
 
@@ -134,7 +149,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ po
     setIsDirty(hasChanged);
     if (hasChanged) {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-      autosaveTimerRef.current = setTimeout(triggerAutosave, 3000);
+      autosaveTimerRef.current = setTimeout(triggerAutosave, 1000);
     }
     // We explicitly do NOT clear the timeout on unmount.
     // This allows the final autosave to complete in the background if the user navigates away.
@@ -263,8 +278,12 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ po
         <div className="flex items-center gap-2">
           {saveError ? (
             <span className="text-red-400 flex items-center gap-1.5"><AlertCircle size={12} /> {saveError}</span>
-          ) : isDirty ? (
+          ) : isSaving ? (
             <span className="text-amber-400 flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> Saving...</span>
+          ) : isDirty ? (
+            <span className="text-zinc-500 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Unsaved changes
+            </span>
           ) : lastSaved ? (
             <span className="text-emerald-400 flex items-center gap-1.5">
               <CheckCircle size={12} /> Saved {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

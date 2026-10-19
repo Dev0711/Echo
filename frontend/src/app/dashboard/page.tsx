@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth';
 import { usePostStore } from '@/lib/store';
 import { postsApi } from '@/lib/api';
 import { Editor, EditorHandle } from '@/components/Editor';
+import type { EditorSelection } from '@/components/BlockEditor';
 import { PreviewRenderer } from '@/components/PreviewRenderer';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -119,6 +120,7 @@ export default function DashboardPage() {
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [showAiAssistant, setShowAiAssistant] = useState(false);
+  const [aiSelection, setAiSelection] = useState<EditorSelection | null>(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [templateInitialBlocks, setTemplateInitialBlocks] = useState<object[] | null>(null);
 
@@ -446,7 +448,7 @@ export default function DashboardPage() {
                 <>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" onClick={() => setShowAiAssistant(true)}>
+                      <Button variant="ghost" size="icon" onClick={() => { setAiSelection(editorRef.current?.getSelection() ?? null); setShowAiAssistant(true); }}>
                         <Sparkles size={13} className="text-violet-400" />
                       </Button>
                     </TooltipTrigger>
@@ -506,13 +508,17 @@ export default function DashboardPage() {
       <NotificationPanel isOpen={showNotifications} onClose={() => setShowNotifications(false)} />
       {currentPost && (
         <>
+          {showAiAssistant && (
           <AiAssistantPanel
             postId={currentPost.id}
             postContent={currentPost.bodyMarkdown || ''}
+            selectedText={aiSelection?.text}
             isOpen={showAiAssistant}
-            onClose={() => setShowAiAssistant(false)}
+            onClose={() => { setShowAiAssistant(false); setAiSelection(null); }}
             onApply={(text, mode = 'append') => {
-              if (mode === 'replace') {
+              if (mode === 'replace_selection' && aiSelection) {
+                void editorRef.current?.replaceRange(aiSelection.from, aiSelection.to, text);
+              } else if (mode === 'replace') {
                 editorRef.current?.replaceMarkdown(text);
               } else if (mode === 'replace_intro') {
                 const currentText = currentPost.bodyMarkdown || '';
@@ -536,6 +542,7 @@ export default function DashboardPage() {
               updatePost(currentPost.id, { tags: merged });
             }}
           />
+          )}
           <VersionHistoryPanel
             postId={currentPost.id}
             isOpen={showVersionHistory}

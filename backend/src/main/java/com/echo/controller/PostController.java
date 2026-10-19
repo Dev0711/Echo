@@ -76,8 +76,12 @@ public class PostController {
     @PostMapping("/{id}/ai-assist")
     public com.echo.dto.AiAssistResponse aiAssist(@PathVariable String id, @RequestBody com.echo.dto.AiAssistRequest request) {
         PostResponse post = postService.getPost(id);
-        // We'll let the controller call geminiService.assist
-        String result = geminiService.assist(request.action(), post.getBodyMarkdown());
+        // Prefer the text supplied by the client (e.g. the user's current editor
+        // selection) and fall back to the stored post body for whole-document actions.
+        String content = request.content() != null && !request.content().isBlank()
+                ? request.content()
+                : post.getBodyMarkdown();
+        String result = geminiService.assist(request.action(), content);
         return new com.echo.dto.AiAssistResponse(result);
     }
 }
