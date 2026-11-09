@@ -3,7 +3,7 @@ services:
     name: echo-backend
     runtime: docker
     plan: free
-    region: oregon
+    region: singapore
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /actuator/health
