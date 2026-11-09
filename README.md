@@ -106,18 +106,6 @@ See `.env.example` in both `backend/` and `frontend/` directories.
 | `TWITTER_API_KEY` | X (Twitter) API Key |
 | `LINKEDIN_CLIENT_ID` | LinkedIn OAuth Client ID |
 
----
-
-## 🏗️ Architecture Overview
-
-```mermaid
-graph LR
-    A[Editor (Next.js)] -->|Saves Markdown| B(MongoDB)
-    A -->|Publish Request| C{Transform Layer}
-    C -->|Thread formatting| D[Twitter/X]
-    C -->|HTML/MD formatting| E[Dev.to]
-    C -->|Plain text formatting| F[LinkedIn]
-```
 
 ---
 
