@@ -1,4 +1,5 @@
 import type { UserResponse } from '@/types';
+import { BACKEND_URL } from './config';
 
 const TOKEN_KEY = 'echo_jwt';
 
@@ -40,7 +41,7 @@ export const auth = {
   },
 
   loginWithGoogle: () => {
-    window.location.href = 'http://localhost:8080/oauth2/authorization/google';
+    window.location.href = `${BACKEND_URL}/oauth2/authorization/google`;
   },
 
   logout: () => {

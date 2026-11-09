@@ -1,6 +1,8 @@
 'use client';
 import { useState, useCallback, useEffect } from 'react';
 import { Sparkles, X, Copy, Check, Loader2, ChevronRight, Tag, ArrowRight, Quote, Wand2, Plus } from 'lucide-react';
+import { auth } from '@/lib/auth';
+import { BACKEND_URL } from '@/lib/config';
 
 // Simple LCS-based word diff
 type DiffToken = { text: string; type: 'same' | 'removed' | 'added' };
@@ -85,8 +87,8 @@ export function AiAssistantPanel({ postId, postContent, selectedText, isOpen, on
     setUsedSelection(scopeToSelection);
 
     try {
-      const token = localStorage.getItem('echo_token');
-      const res = await fetch(`http://localhost:8080/api/posts/${postId}/ai-assist`, {
+      const token = auth.getToken();
+      const res = await fetch(`${BACKEND_URL}/api/posts/${postId}/ai-assist`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({

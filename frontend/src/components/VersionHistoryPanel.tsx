@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import { X, Clock, RotateCcw, Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { auth } from '@/lib/auth';
+import { BACKEND_URL } from '@/lib/config';
 
 interface PostVersion {
   id: string;
@@ -26,8 +28,8 @@ export function VersionHistoryPanel({ postId, isOpen, onClose, onRestore }: Vers
   useEffect(() => {
     if (isOpen && postId) {
       setIsLoading(true);
-      const token = localStorage.getItem('echo_token');
-      fetch(`http://localhost:8080/api/posts/${postId}/versions`, {
+      const token = auth.getToken();
+      fetch(`${BACKEND_URL}/api/posts/${postId}/versions`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((r) => r.json())

@@ -1,6 +1,8 @@
 'use client';
 import { useState, useRef } from 'react';
 import { Upload, X, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { auth } from '@/lib/auth';
+import { BACKEND_URL } from '@/lib/config';
 
 interface CoverImageUploadProps {
   coverImageUrl?: string | null;
@@ -21,8 +23,8 @@ export function CoverImageUpload({ coverImageUrl, onChange }: CoverImageUploadPr
     setIsUploading(true);
     setError(null);
     try {
-      const sigRes = await fetch('http://localhost:8080/api/media/signature', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('echo_token')}` },
+      const sigRes = await fetch(`${BACKEND_URL}/api/media/signature`, {
+        headers: { Authorization: `Bearer ${auth.getToken()}` },
       });
       const sigData = await sigRes.json();
       const formData = new FormData();

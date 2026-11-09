@@ -10,6 +10,8 @@ import type { Post, PostAutosaveRequest } from '@/types';
 import { AlertCircle, CheckCircle, Loader2, Tag, X } from 'lucide-react';
 import { CoverImageUpload } from './CoverImageUpload';
 import { SeoPanel } from './SeoPanel';
+import { auth } from '@/lib/auth';
+import { BACKEND_URL } from '@/lib/config';
 
 interface EditorProps {
   post: Post | null;
@@ -187,7 +189,9 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ po
     setMarkdown(prev => prev.substring(0, cursorPosition) + placeholder + prev.substring(cursorPosition));
 
     try {
-      const sigRes = await fetch('http://localhost:8080/api/media/signature');
+      const sigRes = await fetch(`${BACKEND_URL}/api/media/signature`, {
+        headers: auth.getToken() ? { Authorization: `Bearer ${auth.getToken()}` } : {},
+      });
       const sigData = await sigRes.json();
 
       const formData = new FormData();
