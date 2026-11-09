@@ -8,7 +8,9 @@ spring:
     name: echo-backend
   mongodb:
     uri: ${MONGODB_URI:mongodb://localhost:27017/echo}
-    auto-index-creation: true
+  data:
+    mongodb:
+      auto-index-creation: true
   security:
     oauth2:
       client:
