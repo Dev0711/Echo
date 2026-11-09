@@ -1,12 +1,12 @@
 <div align="center">
-  <h1>🚀 Echo Platform</h1>
+  <h1> Echo Platform</h1>
   <p><strong>Write once, publish everywhere.</strong></p>
   <p>A unified content creation platform that lets you author in Markdown and intelligently reshape and publish your content across Dev.to, Hashnode, X (Twitter), LinkedIn, and Medium.</p>
 </div>
 
 ---
 
-## ✨ Key Features
+## Key Features
 
 - ✍️ **Write Once in Markdown** — Full CommonMark + extensions support. Use a rich block-based editor or raw Markdown.
 - 🔄 **Auto-Save & Version History** — Never lose a draft. Continuous background saving and full version control.
