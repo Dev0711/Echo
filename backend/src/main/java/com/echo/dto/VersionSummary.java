@@ -18,7 +18,7 @@ public record VersionSummary(
     public static VersionSummary from(PostVersion v) {
         String body = v.bodyMarkdown() == null ? "" : v.bodyMarkdown().strip();
         String preview = body.length() > 160 ? body.substring(0, 160) + "…" : body;
-        return new VersionSummary(v.id(), v.title(), v.reason(), v.label(), v.pinned(),
-                v.wordCount(), v.savedAt(), preview);
+        return new VersionSummary(v.id(), v.title(), v.reason(), v.label(), v.pinnedFlag(),
+                v.words(), v.savedAt(), preview);
     }
 }

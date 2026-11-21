@@ -18,6 +18,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(PostController.class)
@@ -61,5 +63,24 @@ class ApiSecurityTest {
         for (String path : List.of("/api/posts/1", "/api/posts/1/versions", "/api/posts/1/preview", "/api/analytics/summary")) {
             mvc.perform(get(path)).andExpect(status().isUnauthorized());
         }
+    }
+
+    /** The browser sends this without a token before every cross-origin call from the Vercel frontend. */
+    @Test
+    void corsPreflightFromTheFrontendSucceedsWithoutAToken() throws Exception {
+        mvc.perform(options("/api/posts")
+                        .header("Origin", "http://localhost:3000")
+                        .header("Access-Control-Request-Method", "PATCH")
+                        .header("Access-Control-Request-Headers", "authorization,content-type"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:3000"));
+    }
+
+    @Test
+    void preflightFromAnUnlistedOriginIsRejected() throws Exception {
+        mvc.perform(options("/api/posts")
+                        .header("Origin", "https://evil.example")
+                        .header("Access-Control-Request-Method", "GET"))
+                .andExpect(status().isForbidden());
     }
 }

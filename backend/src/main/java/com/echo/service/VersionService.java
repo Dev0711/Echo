@@ -89,7 +89,7 @@ public class VersionService {
     /** Renames and/or pins/unpins a version. Pinned versions never expire. */
     public PostVersion update(String postId, String versionId, String label, Boolean pinned) {
         PostVersion v = get(postId, versionId);
-        boolean newPinned = pinned != null ? pinned : v.pinned();
+        boolean newPinned = pinned != null ? pinned : v.pinnedFlag();
         String newLabel = label != null ? (label.isBlank() ? null : label.strip()) : v.label();
         if (newLabel != null) newPinned = true; // a named version is a keeper
         Instant expireAt = newPinned ? null : RetentionPolicy.expiryFor(v.savedAt());

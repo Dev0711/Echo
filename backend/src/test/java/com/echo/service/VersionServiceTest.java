@@ -64,9 +64,9 @@ class VersionServiceTest {
         when(repo.findFirstByPostIdOrderBySavedAtDesc("p1"))
                 .thenReturn(Optional.of(existing(old, Reason.AUTO, Instant.now().minus(Duration.ofMinutes(5)), false)));
         PostVersion v = service.checkpoint(post("hello world"), Reason.AUTO, null).orElseThrow();
-        assertFalse(v.pinned());
+        assertFalse(v.pinnedFlag());
         assertNotNull(v.expireAt(), "unpinned versions must expire");
-        assertEquals(2, v.wordCount());
+        assertEquals(2, v.words());
     }
 
     @Test
@@ -87,7 +87,7 @@ class VersionServiceTest {
     void manualCheckpointIsPinnedAndNeverExpires() {
         when(repo.findFirstByPostIdOrderBySavedAtDesc("p1")).thenReturn(Optional.empty());
         PostVersion v = service.checkpoint(post("text"), Reason.MANUAL, "First draft").orElseThrow();
-        assertTrue(v.pinned());
+        assertTrue(v.pinnedFlag());
         assertNull(v.expireAt());
         assertEquals("First draft", v.label());
     }
@@ -99,7 +99,7 @@ class VersionServiceTest {
                 .thenReturn(Optional.of(existing(p, Reason.AUTO, Instant.now().minusSeconds(5), false)));
         PostVersion v = service.checkpoint(p, Reason.PUBLISH, "Published").orElseThrow();
         assertEquals("v1", v.id());
-        assertTrue(v.pinned());
+        assertTrue(v.pinnedFlag());
         assertEquals(Reason.PUBLISH, v.reason());
         ArgumentCaptor<PostVersion> cap = ArgumentCaptor.forClass(PostVersion.class);
         verify(repo, times(1)).save(cap.capture());

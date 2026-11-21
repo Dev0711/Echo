@@ -20,12 +20,19 @@ public record PostVersion(
         String bodyMarkdown,
         String structuredContent,
         String contentHash,
-        int wordCount,
+        Integer wordCount,
         Reason reason,
         String label,
-        boolean pinned,
+        Boolean pinned,
         Instant savedAt,
         @Indexed(expireAfterSeconds = 0) Instant expireAt
 ) {
+    // Boxed on purpose: documents written before the checkpoint schema lack these fields, and Spring Data
+    // cannot construct a record from a missing primitive. Use these null-safe views instead of the raw accessors.
+    // (Deliberately not named getX/isX so Jackson does not serialise them as extra properties.)
+    public boolean pinnedFlag() { return Boolean.TRUE.equals(pinned); }
+
+    public int words() { return wordCount == null ? 0 : wordCount; }
+
     public enum Reason { AUTO, MANUAL, PUBLISH, SCHEDULE, PRE_AI, PRE_RESTORE }
 }
