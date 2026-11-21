@@ -81,7 +81,9 @@
 | **PostController**              | REST endpoints for CRUD, autosave, preview, publish                 |
 | **PostService**                 | Business logic: create, autosave, versioning, publish orchestration |
 | **PostRepository**              | MongoDB data access for posts                                       |
-| **PostVersionRepository**       | MongoDB data access for post versions (last 20)                     |
+| **VersionService**              | Version checkpoints: dedupe, throttle, pinning, tiered retention    |
+| **PlatformPublishService**      | Background per-platform publishing with retry; atomic status writes |
+| **AiService / GeminiClient**    | Safe prompts, JSON-mode answers, rate limiting, real error statuses |
 | **MediaRepository**             | MongoDB data access for media assets                                |
 | **PlatformFormatter**           | Converts parsed AST to platform-specific format                     |
 | **PlatformPublisher**           | Publishes formatted content to platform APIs                        |
@@ -93,7 +95,7 @@
 | Collection      | Purpose                                              |
 | --------------- | ---------------------------------------------------- |
 | `posts`         | Canonical post documents with per-platform status    |
-| `post_versions` | Last 20 versions per post for history                |
+| `post_versions` | Checkpoints per post (auto + pinned); TTL-expired      |
 | `media`         | Media asset metadata (URL, alt text, post reference) |
 
 ### Platform Adapters
@@ -119,9 +121,23 @@ User → Editor → POST /api/posts → PostService.create() → MongoDB → Pos
 ### 2. Autosave
 
 ```
-Editor (debounced) → PATCH /api/posts/{id}/autosave → PostService.autosave()
-  → MongoDB (update post) + MongoDB (save version periodically)
+Editor (debounced 1s) → PATCH /api/posts/{id}/autosave → PostService.autosave()
+  → MongoDB partial $set on the working copy (never touches platform status)
+  → VersionService.checkpoint(AUTO): only if content changed AND ≥2 min since the last one
 ```
+
+Version history is a set of **checkpoints**, not a copy per keystroke:
+
+| Reason        | Created when                                   | Retention                          |
+| ------------- | ---------------------------------------------- | ---------------------------------- |
+| `AUTO`        | content changed, ≥ 2 min since last checkpoint | hourly after 1 h, daily after 24 h, gone after 30 d (`RetentionPolicy` + TTL index) |
+| `MANUAL`      | user clicks "Save a version"                   | pinned (kept)                      |
+| `PUBLISH` / `SCHEDULE` | right before publishing / scheduling  | pinned                             |
+| `PRE_AI`      | right before the AI replaces text              | pinned                             |
+| `PRE_RESTORE` | right before restoring an old version          | pinned                             |
+
+Restoring never destroys anything: the current state is checkpointed first. Deleting a post
+deletes its versions.
 
 ### 3. Preview
 
@@ -158,14 +174,17 @@ User selects platforms → POST /api/posts/{id}/publish → PostService.publish(
 - Skip platforms already `PUBLISHED` or `PENDING`
 - `@Retryable` on transient failures only
 
-### Optimistic Concurrency
+### Concurrency
 
-- Autosave updates `updatedAt` and `lastAutosavedAt`
-- No locking; last-write-wins acceptable for single-user
+- Autosave and publish-status changes use targeted `$set` updates, so they cannot overwrite each other
+- Scheduled posts are claimed with a conditional update (`SCHEDULED → PUBLISHED`), so two instances never both publish one
 
 ## Security
 
-- **No secrets in code** — all via environment variables
+- **Every `/api/**` endpoint requires a JWT** (401 otherwise); only the OAuth handshake and health checks are public
+- **Per-user ownership** — every post query is scoped to the signed-in user's id
+- **No secrets in code** — all via environment variables; with the `prod` profile the app refuses to start on the built-in dev secrets
+- **AI**: per-user rate limit, size cap, user text passed as delimited data (not instructions)
 - **CORS** configured for frontend origin
 - **Validation** on all DTOs with Bean Validation
 - **Global exception handler** for consistent error responses

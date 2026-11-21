@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import type { Post, PostStatus, PlatformStatus } from '@/types';
 
 interface PostState {
@@ -20,7 +19,6 @@ interface PostState {
 }
 
 export const usePostStore = create<PostState>()(
-  persist(
     (set) => ({
       posts: [],
       currentPost: null,
@@ -61,10 +59,5 @@ export const usePostStore = create<PostState>()(
             } 
           : state.currentPost,
       })),
-    }),
-    {
-      name: 'echo-posts',
-      partialize: (state) => ({ posts: state.posts }),
-    }
-  )
+    })
 );

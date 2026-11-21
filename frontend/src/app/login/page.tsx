@@ -1,14 +1,16 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { auth } from '@/lib/auth';
 import { Zap, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 
 export default function LoginPage() {
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
-    if (auth.isAuthenticated()) window.location.href = '/dashboard';
+    if (auth.isAuthenticated()) { window.location.href = '/dashboard'; return; }
+    setFailed(new URLSearchParams(window.location.search).has('error'));
   }, []);
 
   return (
@@ -29,6 +31,12 @@ export default function LoginPage() {
           <p className="text-[12px] text-[#71717a] text-center mb-7 leading-relaxed">
             Write once, publish to X, LinkedIn, Dev.to, Hashnode, and Medium.
           </p>
+
+          {failed && (
+            <p role="alert" className="mb-4 text-[12px] text-red-300 bg-red-500/10 border border-red-500/20 rounded-md px-3 py-2">
+              Sign-in didn't complete. Please try again.
+            </p>
+          )}
 
           {/* Google Sign-in */}
           <button

@@ -30,6 +30,18 @@ public class SecurityConfig {
         this.oAuthSuccessHandler = oAuthSuccessHandler;
     }
 
+    /**
+     * JwtAuthFilter is a @Component, so Spring Boot would also register it as a plain servlet filter.
+     * It must only run inside the security chain (where it is added explicitly below); a second,
+     * out-of-order registration would have its authentication wiped by the chain and then skipped.
+     */
+    @Bean
+    public org.springframework.boot.web.servlet.FilterRegistrationBean<JwtAuthFilter> jwtFilterRegistration(JwtAuthFilter filter) {
+        var registration = new org.springframework.boot.web.servlet.FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
