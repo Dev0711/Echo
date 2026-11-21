@@ -27,42 +27,55 @@ interface BlockEditorProps {
   editorRef?: React.MutableRefObject<BlockEditorHandle | null>;
 }
 
-export default function BlockEditor({ structuredContent, markdownContent, onChange, editorRef }: BlockEditorProps) {
+/**
+ * Resolves the initial blocks once, then mounts the real editor. BlockNote creates its editor
+ * instance a single time, so it must not be created before the initial content is known
+ * (otherwise opening an existing post shows an empty editor).
+ */
+export default function BlockEditor(props: BlockEditorProps) {
   const [initialBlocks, setInitialBlocks] = useState<PartialBlock[] | undefined | "loading">("loading");
 
   useEffect(() => {
+    let cancelled = false;
     async function loadBlocks() {
+      const { structuredContent, markdownContent } = props;
       if (structuredContent) {
         try {
           const parsed = JSON.parse(structuredContent);
-          setInitialBlocks(parsed);
+          if (!cancelled) setInitialBlocks(parsed);
           return;
         } catch (e) {
           console.error("Failed to parse structuredContent", e);
         }
       }
-      
-      // One-way migration: If no structuredContent, but we have markdown, parse it!
+      // One-way migration: no structured content yet, but we have markdown.
       if (markdownContent && markdownContent.trim() !== '') {
         try {
           const tempEditor = BlockNoteEditor.create();
           const blocks = await tempEditor.tryParseMarkdownToBlocks(markdownContent);
-          setInitialBlocks(blocks);
+          if (!cancelled) setInitialBlocks(blocks);
           return;
         } catch (e) {
           console.error("Failed to parse markdown", e);
         }
       }
-
-      // Default empty
-      setInitialBlocks(undefined);
+      if (!cancelled) setInitialBlocks(undefined);
     }
-    
-    loadBlocks();
-  }, [structuredContent, markdownContent]);
+    void loadBlocks();
+    return () => { cancelled = true; };
+    // Intentionally once per mount: the parent remounts this component (key) for each post.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  if (initialBlocks === "loading") {
+    return <div className="h-32 flex items-center justify-center text-[#71717a] text-[13px]">Loading editor…</div>;
+  }
+  return <BlockEditorInner {...props} initialBlocks={initialBlocks} />;
+}
+
+function BlockEditorInner({ onChange, editorRef, initialBlocks }: BlockEditorProps & { initialBlocks: PartialBlock[] | undefined }) {
   const editor = useCreateBlockNote({
-    initialContent: initialBlocks === "loading" ? undefined : initialBlocks,
+    initialContent: initialBlocks,
   });
 
   useEffect(() => {
@@ -106,10 +119,6 @@ export default function BlockEditor({ structuredContent, markdownContent, onChan
       };
     }
   }, [editor, editorRef, onChange]);
-
-  if (initialBlocks === "loading") {
-    return <div className="h-full flex items-center justify-center text-[#a1a1aa]">Loading editor...</div>;
-  }
 
   return (
     <div className="flex flex-col blocknote-custom-wrapper relative">

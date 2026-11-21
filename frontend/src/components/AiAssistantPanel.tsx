@@ -1,297 +1,271 @@
 'use client';
-import { useState, useCallback, useEffect } from 'react';
-import { Sparkles, X, Copy, Check, Loader2, ChevronRight, Tag, ArrowRight, Quote, Wand2, Plus } from 'lucide-react';
-import { auth } from '@/lib/auth';
-import { BACKEND_URL } from '@/lib/config';
+import { useState, useEffect, useMemo } from 'react';
+import {
+  Sparkles, X, Copy, Check, Loader2, ChevronLeft, Tag, Plus, SpellCheck, Wand2, Scissors, Expand,
+  Heading, Hash, AlignLeft, Search, Share2, MessageSquareQuote,
+} from 'lucide-react';
+import { postsApi, errorMessage } from '@/lib/api';
+import { wordDiff, findIntro } from '@/lib/diff';
+import { toast } from '@/lib/toast';
+import type { AiAction, AiAssistResponse } from '@/types';
 
-// Simple LCS-based word diff
-type DiffToken = { text: string; type: 'same' | 'removed' | 'added' };
+type Scope = 'selection' | 'intro' | 'document';
 
-function wordDiff(original: string, revised: string): DiffToken[] {
-  const origWords = original.split(/\s+/).filter(Boolean);
-  const revWords = revised.split(/\s+/).filter(Boolean);
-  // Build LCS table
-  const m = origWords.length, n = revWords.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-  for (let i = 1; i <= m; i++)
-    for (let j = 1; j <= n; j++)
-      dp[i][j] = origWords[i-1] === revWords[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
-  // Backtrack
-  const tokens: DiffToken[] = [];
-  let i = m, j = n;
-  while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && origWords[i-1] === revWords[j-1]) {
-      tokens.unshift({ text: origWords[i-1], type: 'same' });
-      i--; j--;
-    } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
-      tokens.unshift({ text: revWords[j-1], type: 'added' });
-      j--;
-    } else {
-      tokens.unshift({ text: origWords[i-1], type: 'removed' });
-      i--;
-    }
-  }
-  return tokens;
+interface ActionDef {
+  id: AiAction;
+  label: string;
+  hint: string;
+  icon: typeof Sparkles;
+  /** text rewrites show a before/after and replace text in the post */
+  rewrite?: boolean;
 }
 
-const ACTIONS = [
-  { id: 'fix_grammar', label: 'Fix Grammar', icon: '🔤', description: 'Track & fix errors inline', color: 'from-rose-500 to-pink-600' },
-  { id: 'improve_intro', label: 'Improve Intro', icon: '✨', description: 'Before & after comparison', color: 'from-violet-500 to-purple-600' },
-  { id: 'suggest_tags', label: 'Suggest Tags', icon: '🏷️', description: 'Click to select & add tags', color: 'from-blue-500 to-cyan-600' },
-  { id: 'summarize', label: 'Write TL;DR', icon: '📝', description: 'Insert a summary block', color: 'from-emerald-500 to-teal-600' },
+const IMPROVE: ActionDef[] = [
+  { id: 'fix_grammar', label: 'Fix grammar', hint: 'Spelling & punctuation only', icon: SpellCheck, rewrite: true },
+  { id: 'change_tone', label: 'Change tone', hint: 'Casual, professional…', icon: Wand2, rewrite: true },
+  { id: 'shorten', label: 'Make shorter', hint: 'Trim about 40%', icon: Scissors, rewrite: true },
+  { id: 'expand', label: 'Add detail', hint: 'Explain a bit more', icon: Expand, rewrite: true },
+  { id: 'improve_intro', label: 'Better intro', hint: 'A stronger opening', icon: AlignLeft, rewrite: true },
 ];
+const CREATE: ActionDef[] = [
+  { id: 'suggest_titles', label: 'Title ideas', hint: '5 options to pick from', icon: Heading },
+  { id: 'suggest_tags', label: 'Tags', hint: 'Pick the ones you like', icon: Hash },
+  { id: 'summarize', label: 'TL;DR', hint: 'A 2-sentence summary', icon: MessageSquareQuote },
+  { id: 'meta_description', label: 'SEO description', hint: 'For search results', icon: Search },
+  { id: 'social_posts', label: 'Social posts', hint: 'For X and LinkedIn', icon: Share2 },
+];
+const ALL = [...IMPROVE, ...CREATE];
+const TONES = ['professional', 'casual', 'friendly', 'confident', 'concise'];
 
-interface AiAssistantPanelProps {
+interface Props {
   postId: string;
   postContent: string;
   selectedText?: string;
   isOpen: boolean;
   onClose: () => void;
-  onApply: (text: string, mode?: 'append' | 'replace' | 'replace_intro' | 'replace_selection') => void;
-  onAddTags?: (tags: string[]) => void;
+  /** Replace text in the post. `intro` carries the character range of the intro paragraph. */
+  onReplace: (target: { scope: Scope; range?: { start: number; end: number } }, text: string) => void;
+  onPrependTldr: (text: string) => void;
+  onAddTags: (tags: string[]) => void;
+  onSetTitle: (title: string) => void;
+  onSetMeta: (text: string) => void;
+  onSetOverride: (platform: 'twitter' | 'linkedin', text: string) => void;
 }
 
-export function AiAssistantPanel({ postId, postContent, selectedText, isOpen, onClose, onApply, onAddTags }: AiAssistantPanelProps) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-  const [activeAction, setActiveAction] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+export function AiAssistantPanel(props: Props) {
+  const { postId, postContent, selectedText, isOpen, onClose } = props;
+  const [action, setAction] = useState<ActionDef | null>(null);
+  const [pickingTone, setPickingTone] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
-  const [usedSelection, setUsedSelection] = useState(false);
+  const [data, setData] = useState<AiAssistResponse | null>(null);
+  const [source, setSource] = useState('');
+  const [scope, setScope] = useState<Scope>('document');
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [lastTone, setLastTone] = useState<string | undefined>();
 
   const hasSelection = !!selectedText && selectedText.trim().length > 0;
+  const intro = useMemo(() => findIntro(postContent), [postContent]);
+  const hasText = postContent.trim().length > 0;
 
-  // Every time the panel is opened, start from a clean slate. Without this the
-  // previous result (and "usedSelection" flag) survived the close, so reopening
-  // showed the old correction and applying it again re-inserted the same text.
   useEffect(() => {
     if (!isOpen) return;
-    setActiveAction(null);
-    setResult(null);
-    setError(null);
-    setSelectedTags(new Set());
-    setUsedSelection(false);
+    setAction(null); setPickingTone(false); setData(null); setError(null); setPicked(new Set());
   }, [isOpen]);
 
-  const runAction = async (actionId: string) => {
-    setIsLoading(true);
-    setResult(null);
-    setError(null);
-    setActiveAction(actionId);
-    setSelectedTags(new Set());
+  const run = async (def: ActionDef, option?: string) => {
+    // Rewrites work on the selection when there is one, the intro for "Better intro", else the whole post.
+    let sc: Scope = 'document', text = postContent;
+    if (def.id === 'improve_intro') {
+      if (!intro) { toast.error("Couldn't find an intro paragraph to improve."); return; }
+      sc = 'intro'; text = intro.text;
+    } else if (def.rewrite && hasSelection) { sc = 'selection'; text = selectedText!; }
 
-    // Grammar fixes can be scoped to the user's current selection. Other actions
-    // (tags, TL;DR, intro rewrite) need the whole document for context.
-    const scopeToSelection = actionId === 'fix_grammar' && hasSelection;
-    setUsedSelection(scopeToSelection);
-
+    setAction(def); setPickingTone(false); setLoading(true); setError(null); setData(null);
+    setScope(sc); setSource(text); setPicked(new Set()); setLastTone(option);
     try {
-      const token = auth.getToken();
-      const res = await fetch(`${BACKEND_URL}/api/posts/${postId}/ai-assist`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          action: actionId,
-          ...(scopeToSelection ? { content: selectedText } : {}),
-        }),
+      const res = await postsApi.aiAssist(postId, {
+        action: def.id, content: text, option,
+        ...(def.id === 'improve_intro' ? { context: postContent } : {}),
       });
-      if (!res.ok) throw new Error('Request failed');
-      const data = await res.json();
-      setResult(data.result);
-    } catch {
-      setError('AI request failed. Check your API key in .env.properties.');
-    } finally {
-      setIsLoading(false);
-    }
+      setData(res.data);
+    } catch (e) {
+      setError(errorMessage(e, 'The AI assistant could not complete that. Please try again.'));
+    } finally { setLoading(false); }
   };
 
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+  const back = () => { setAction(null); setData(null); setError(null); };
+  const copy = async (text: string) => { await navigator.clipboard.writeText(text); toast.info('Copied'); };
 
-  const toggleTag = (tag: string) => {
-    const newSelected = new Set(selectedTags);
-    if (newSelected.has(tag)) newSelected.delete(tag);
-    else newSelected.add(tag);
-    setSelectedTags(newSelected);
-  };
-
-  const reset = () => {
-    setActiveAction(null);
-    setResult(null);
-    setError(null);
-    setUsedSelection(false);
+  const applyRewrite = async () => {
+    if (!data?.result) return;
+    try { await postsApi.aiCheckpoint(postId); } catch { /* the restore point is best-effort */ }
+    props.onReplace({ scope, range: scope === 'intro' && intro ? { start: intro.start, end: intro.end } : undefined }, data.result);
+    toast.success('Applied. You can undo this from Version history (“Before AI edit”).');
+    onClose();
   };
 
   if (!isOpen) return null;
 
+  const diff = data?.result && action?.rewrite ? wordDiff(source, data.result) : [];
+
   return (
     <div className="fixed inset-0 z-50 flex">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative ml-auto w-96 bg-[#0d0d0d] border-l border-white/8 h-full flex flex-col shadow-2xl transition-transform duration-300">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/8">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center">
-              <Sparkles size={14} className="text-white" />
-            </div>
-            <span className="text-sm font-semibold text-white">AI Assistant</span>
-            <span className="text-[10px] px-2 py-0.5 bg-violet-500/20 text-violet-400 rounded-full font-medium">Gemini</span>
+      <aside className="relative ml-auto w-[420px] max-w-full bg-[#0d0d0d] border-l border-white/8 h-full flex flex-col shadow-2xl" aria-label="AI assistant">
+        <header className="flex items-center justify-between px-5 py-4 border-b border-white/8">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-md bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center"><Sparkles size={14} className="text-white" /></div>
+            <h2 className="text-sm font-semibold text-white">AI assistant</h2>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/8 text-zinc-500 hover:text-white transition-colors">
-            <X size={16} />
-          </button>
-        </div>
+          <button onClick={onClose} aria-label="Close" className="p-1.5 rounded-lg hover:bg-white/8 text-zinc-500 hover:text-white"><X size={16} /></button>
+        </header>
 
-        {/* Content area */}
-        <div className="flex-1 overflow-y-auto">
-          {!activeAction ? (
-            <div className="p-5">
-              <p className="text-sm font-medium text-zinc-300 mb-4">Choose an action</p>
-              {hasSelection && (
-                <div className="mb-4 px-3 py-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 leading-relaxed">
-                  Fix Grammar will only apply to your selected text
-                  <span className="text-emerald-500/70"> ({selectedText!.length} characters)</span>.
-                </div>
-              )}
-              <div className="grid grid-cols-2 gap-3">
-                {ACTIONS.map((action) => (
-                  <button
-                    key={action.id}
-                    onClick={() => runAction(action.id)}
-                    className="bg-[#111] hover:bg-[#161616] border border-white/8 hover:border-white/20 rounded-xl p-4 cursor-pointer transition-all flex flex-col items-start text-left group relative"
-                  >
-                    {action.id === 'fix_grammar' && hasSelection && (
-                      <span className="absolute top-2 right-2 text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-medium">
-                        selection
-                      </span>
-                    )}
-                    <span className="text-2xl mb-2 group-hover:scale-110 transition-transform">{action.icon}</span>
-                    <span className="text-sm font-medium text-zinc-200 mb-1">{action.label}</span>
-                    <span className="text-xs text-zinc-500">{action.description}</span>
-                  </button>
-                ))}
-              </div>
+        <div className="flex-1 overflow-y-auto p-5">
+          {!action ? (
+            <div className="space-y-6">
+              {!hasText && <p className="text-[12px] text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">Write a few sentences first, then the assistant has something to work with.</p>}
+              {hasSelection && <p className="text-[12px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">Rewrite actions will only change your selected text ({selectedText!.length} characters).</p>}
+              {[{ title: 'Improve your writing', list: IMPROVE }, { title: 'Create from your post', list: CREATE }].map(group => (
+                <section key={group.title}>
+                  <h3 className="text-[11px] font-medium tracking-wider uppercase text-zinc-500 mb-2">{group.title}</h3>
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {group.list.map(def => {
+                      const Icon = def.icon;
+                      return (
+                        <div key={def.id}>
+                          <button disabled={!hasText} onClick={() => def.id === 'change_tone' ? setPickingTone(p => !p) : run(def)}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[#131313] hover:bg-[#1a1a1a] border border-white/6 hover:border-white/15 disabled:opacity-40 disabled:cursor-not-allowed text-left transition-colors">
+                            <Icon size={15} className="text-violet-400 shrink-0" />
+                            <span className="flex-1 min-w-0">
+                              <span className="block text-[13px] text-zinc-200">{def.label}</span>
+                              <span className="block text-[11px] text-zinc-500">{def.hint}</span>
+                            </span>
+                          </button>
+                          {def.id === 'change_tone' && pickingTone && (
+                            <div className="flex flex-wrap gap-1.5 px-1 pt-2 pb-1">
+                              {TONES.map(t => (
+                                <button key={t} onClick={() => run(def, t)} className="px-3 py-1 rounded-full text-[12px] capitalize bg-white/5 hover:bg-violet-500/20 border border-white/10 text-zinc-300">{t}</button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
             </div>
           ) : (
-            <div className="flex flex-col h-full">
-              <div className="p-4 border-b border-white/5 flex items-center gap-3">
-                <button onClick={reset} className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors">
-                  <ChevronRight size={14} className="rotate-180" /> Back
-                </button>
-                <div className="w-px h-3 bg-white/10" />
-                <span className="text-xs font-medium text-zinc-400">
-                  {ACTIONS.find(a => a.id === activeAction)?.label}
-                  {usedSelection && <span className="text-emerald-400"> · selection</span>}
-                </span>
+            <div className="space-y-4">
+              <button onClick={back} className="flex items-center gap-1 text-[12px] text-zinc-500 hover:text-zinc-300"><ChevronLeft size={14} /> All actions</button>
+              <div className="flex items-center gap-2">
+                <h3 className="text-[13px] font-medium text-zinc-200">{action.label}{lastTone ? ` · ${lastTone}` : ''}</h3>
+                {action.rewrite && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/5 text-zinc-400">{scope === 'selection' ? 'your selection' : scope === 'intro' ? 'intro paragraph' : 'whole post'}</span>}
               </div>
 
-              <div className="p-5 flex-1 overflow-y-auto flex flex-col">
-                {isLoading ? (
-                  <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 py-12">
-                    <Loader2 size={24} className="animate-spin text-violet-500 mb-3" />
-                    <span className="text-sm">Analyzing text...</span>
-                  </div>
-                ) : error ? (
-                  <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-sm text-red-400">
-                    {error}
-                  </div>
-                ) : result && activeAction === 'fix_grammar' ? (
-                  <div className="flex flex-col gap-4">
-                    <div className="bg-[#111] border border-white/5 rounded-xl p-4 text-sm leading-loose">
-                      {wordDiff(usedSelection ? (selectedText ?? '') : postContent.substring(0, 500), result).map((token, i) => (
-                        <span
-                          key={i}
-                          className={
-                            token.type === 'removed' ? 'text-red-400 line-through bg-red-950/40 px-0.5 mx-0.5 rounded' :
-                            token.type === 'added' ? 'text-emerald-400 bg-emerald-950/40 px-0.5 mx-0.5 rounded' :
-                            'text-zinc-200'
-                          }
-                        >{token.text}{' '}</span>
+              {loading && <div className="flex flex-col items-center py-14 text-zinc-500"><Loader2 size={22} className="animate-spin text-violet-500 mb-3" /><span className="text-[13px]">Working on it…</span></div>}
+
+              {error && (
+                <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4">
+                  <p className="text-[13px] text-red-300 mb-3">{error}</p>
+                  <button onClick={() => run(action, lastTone)} className="text-[12px] text-red-200 underline underline-offset-2">Try again</button>
+                </div>
+              )}
+
+              {/* Rewrites: before/after, then apply */}
+              {data?.result && action.rewrite && (
+                <>
+                  <div className="bg-[#111] border border-white/5 rounded-lg p-4 text-[13px] leading-relaxed max-h-[46vh] overflow-y-auto">
+                    {diff.length > 0 && !diff.some(t => t.type !== 'same')
+                      ? <p className="text-zinc-400">No changes needed — this already looks good.</p>
+                      : diff.map((t, i) => (
+                        <span key={i} className={t.type === 'removed' ? 'text-red-400 line-through bg-red-950/40 rounded px-0.5' : t.type === 'added' ? 'text-emerald-400 bg-emerald-950/40 rounded px-0.5' : 'text-zinc-300'}>{t.text} </span>
                       ))}
-                    </div>
-                    <div className="text-xs text-zinc-500 text-center mb-2">
-                      {usedSelection
-                        ? 'The corrected text will replace only your selection.'
-                        : 'Note: Corrected version will replace your post content.'}
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => { onApply(result, usedSelection ? 'replace_selection' : 'replace'); onClose(); }} className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors flex justify-center items-center gap-2">
-                        <Check size={16} /> Apply corrections
-                      </button>
-                      <button onClick={reset} className="px-4 py-2.5 bg-[#1a1a1a] hover:bg-[#222] text-zinc-300 text-sm font-medium rounded-lg transition-colors border border-white/10">
-                        Dismiss
-                      </button>
-                    </div>
                   </div>
-                ) : result && activeAction === 'suggest_tags' ? (
-                  <div className="flex flex-col gap-4">
-                    <div className="flex flex-wrap gap-2">
-                      {result.split(',').map(t => t.trim()).filter(Boolean).map(tag => {
-                        const isSelected = selectedTags.has(tag);
-                        return (
-                          <button
-                            key={tag}
-                            onClick={() => toggleTag(tag)}
-                            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors border flex items-center gap-1.5 ${
-                              isSelected ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' : 'bg-white/5 border-white/10 text-zinc-400 hover:bg-white/10'
-                            }`}
-                          >
-                            <Tag size={12} /> {tag}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div className="mt-auto pt-4">
-                      <button 
-                        onClick={() => { if (onAddTags) onAddTags(Array.from(selectedTags)); onClose(); }}
-                        disabled={selectedTags.size === 0}
-                        className="w-full py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex justify-center items-center gap-2"
-                      >
-                        <Plus size={16} /> Add {selectedTags.size} tags
-                      </button>
-                    </div>
+                  <p className="text-[11px] text-zinc-500">Red is removed, green is new. A restore point is saved before anything changes.</p>
+                  <div className="flex gap-2">
+                    <button onClick={applyRewrite} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[13px] font-medium rounded-lg"><Check size={15} /> Apply changes</button>
+                    <button onClick={back} className="px-4 py-2.5 text-[13px] text-zinc-300 bg-[#1a1a1a] hover:bg-[#222] border border-white/10 rounded-lg">Discard</button>
                   </div>
-                ) : result && activeAction === 'summarize' ? (
-                  <div className="flex flex-col gap-4">
-                    <div className="bg-[#111] border border-white/5 rounded-xl p-5 relative overflow-hidden">
-                      <Quote size={48} className="absolute -top-2 -left-2 text-white/5" />
-                      <p className="text-sm text-zinc-200 leading-relaxed relative z-10">{result}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => { onApply(`> **TL;DR:** ${result}`); onClose(); }} className="flex-1 py-2.5 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-lg transition-colors flex justify-center items-center gap-2">
-                        <ArrowRight size={16} /> Insert as TL;DR
-                      </button>
-                      <button onClick={() => handleCopy(result)} className="px-4 py-2.5 bg-[#1a1a1a] hover:bg-[#222] text-zinc-300 text-sm font-medium rounded-lg transition-colors border border-white/10">
-                        {copied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
-                      </button>
-                    </div>
+                </>
+              )}
+
+              {/* Titles */}
+              {data?.items && action.id === 'suggest_titles' && (
+                <div className="space-y-1.5">
+                  <p className="text-[12px] text-zinc-500">Click one to use it as your title.</p>
+                  {data.items.map(t => (
+                    <button key={t} onClick={() => { props.onSetTitle(t); toast.success('Title updated'); onClose(); }}
+                      className="w-full text-left px-3 py-2.5 rounded-lg bg-[#131313] hover:bg-violet-500/10 border border-white/8 hover:border-violet-500/40 text-[13px] text-zinc-200">{t}</button>
+                  ))}
+                </div>
+              )}
+
+              {/* Tags */}
+              {data?.items && action.id === 'suggest_tags' && (
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    {data.items.map(tag => {
+                      const on = picked.has(tag);
+                      return (
+                        <button key={tag} onClick={() => setPicked(p => { const n = new Set(p); on ? n.delete(tag) : n.add(tag); return n; })}
+                          className={`px-3 py-1.5 rounded-full text-[13px] border flex items-center gap-1.5 ${on ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' : 'bg-white/5 border-white/10 text-zinc-400 hover:bg-white/10'}`}>
+                          <Tag size={12} /> {tag}
+                        </button>
+                      );
+                    })}
                   </div>
-                ) : result && activeAction === 'improve_intro' ? (
-                  <div className="flex flex-col gap-4">
-                    <div className="grid grid-cols-1 gap-3">
-                      <div className="bg-[#111] border border-white/5 rounded-xl p-4">
-                        <p className="text-xs font-semibold text-zinc-500 mb-2">Original</p>
-                        <p className="text-xs text-zinc-500 leading-relaxed line-clamp-4">{postContent.substring(0, 200)}...</p>
+                  <button disabled={picked.size === 0} onClick={() => { props.onAddTags([...picked]); toast.success(`Added ${picked.size} tag${picked.size > 1 ? 's' : ''}`); onClose(); }}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-[13px] font-medium rounded-lg"><Plus size={15} /> Add {picked.size || ''} selected</button>
+                </>
+              )}
+
+              {/* TL;DR */}
+              {data?.result && action.id === 'summarize' && (
+                <>
+                  <blockquote className="bg-[#111] border border-white/5 rounded-lg p-4 text-[13px] text-zinc-200 leading-relaxed">{data.result}</blockquote>
+                  <div className="flex gap-2">
+                    <button onClick={() => { props.onPrependTldr(data.result!); toast.success('TL;DR added at the top'); onClose(); }} className="flex-1 py-2.5 bg-violet-600 hover:bg-violet-500 text-white text-[13px] font-medium rounded-lg">Add to top of post</button>
+                    <button onClick={() => copy(data.result!)} aria-label="Copy" className="px-3.5 bg-[#1a1a1a] hover:bg-[#222] border border-white/10 rounded-lg text-zinc-300"><Copy size={15} /></button>
+                  </div>
+                </>
+              )}
+
+              {/* Meta description */}
+              {data?.result && action.id === 'meta_description' && (
+                <>
+                  <div className="bg-[#111] border border-white/5 rounded-lg p-4">
+                    <p className="text-[13px] text-zinc-200 leading-relaxed">{data.result}</p>
+                    <p className={`text-[11px] mt-2 ${data.result.length <= 160 ? 'text-emerald-400' : 'text-amber-400'}`}>{data.result.length} characters (aim for under 160)</p>
+                  </div>
+                  <button onClick={() => { props.onSetMeta(data.result!); toast.success('SEO description updated'); onClose(); }} className="w-full py-2.5 bg-violet-600 hover:bg-violet-500 text-white text-[13px] font-medium rounded-lg">Use as SEO description</button>
+                </>
+              )}
+
+              {/* Social posts */}
+              {data?.sections && action.id === 'social_posts' && (
+                <div className="space-y-4">
+                  {([['twitter', 'x', 'X (Twitter)'], ['linkedin', 'linkedin', 'LinkedIn']] as const).map(([platform, key, name]) => data.sections![key] && (
+                    <div key={key} className="bg-[#111] border border-white/5 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[12px] font-medium text-zinc-300">{name}</span>
+                        {key === 'x' && <span className={`text-[11px] ${data.sections![key].length <= 280 ? 'text-zinc-500' : 'text-red-400'}`}>{data.sections![key].length}/280</span>}
                       </div>
-                      <div className="bg-emerald-950/20 border border-emerald-500/20 border-l-4 border-l-emerald-500 rounded-xl p-4">
-                        <p className="text-xs font-semibold text-emerald-400 mb-2">Improved</p>
-                        <p className="text-sm text-zinc-200 leading-relaxed">{result}</p>
+                      <p className="text-[13px] text-zinc-200 leading-relaxed whitespace-pre-wrap">{data.sections![key]}</p>
+                      <div className="flex gap-2 mt-3">
+                        <button onClick={() => { props.onSetOverride(platform, data.sections![key]); toast.success(`Will be used when you publish to ${name}`); }} className="flex-1 py-2 bg-violet-600 hover:bg-violet-500 text-white text-[12px] font-medium rounded-md">Use for {name}</button>
+                        <button onClick={() => copy(data.sections![key])} aria-label={`Copy ${name} post`} className="px-3 bg-[#1a1a1a] hover:bg-[#222] border border-white/10 rounded-md text-zinc-300"><Copy size={13} /></button>
                       </div>
                     </div>
-                    <button onClick={() => { onApply(result, 'replace_intro'); onClose(); }} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors flex justify-center items-center gap-2">
-                      <Check size={16} /> Use improved version
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+                  ))}
+                  <p className="text-[11px] text-zinc-500">“Use for” sets this text as the version sent to that platform instead of the full article.</p>
+                </div>
+              )}
             </div>
           )}
         </div>
-      </div>
+      </aside>
     </div>
   );
 }

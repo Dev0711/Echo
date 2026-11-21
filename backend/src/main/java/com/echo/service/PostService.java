@@ -5,402 +5,306 @@ import com.echo.dto.PostCreateRequest;
 import com.echo.dto.PostResponse;
 import com.echo.dto.PreviewResponse;
 import com.echo.dto.PublishRequest;
+import com.echo.dto.VersionSummary;
 import com.echo.exception.ResourceNotFoundException;
-import com.echo.mapper.PostMapper;
+import com.echo.model.PlatformStatus;
+import com.echo.model.PlatformStatus.PlatformPublishStatus;
 import com.echo.model.Post;
 import com.echo.model.PostVersion;
-import com.echo.model.PlatformStatus;
+import com.echo.model.PostVersion.Reason;
 import com.echo.platform.common.FormattedContent;
+import com.echo.platform.common.ParsedPost;
 import com.echo.platform.common.PlatformCredentials;
 import com.echo.platform.common.PlatformFormatter;
-import com.echo.platform.common.PlatformPublisher;
-import com.echo.platform.common.PublishResult;
-import com.echo.platform.common.ParsedPost;
+import com.echo.repository.PlatformCredentialRepository;
 import com.echo.repository.PostRepository;
-import com.echo.repository.PostVersionRepository;
+import com.echo.security.EncryptionService;
 import com.vladsch.flexmark.parser.Parser;
 import com.vladsch.flexmark.util.ast.Node;
-import org.springframework.scheduling.annotation.Async;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
-import org.springframework.retry.annotation.Retryable;
-import org.springframework.retry.annotation.Backoff;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Post business logic. Every public method is scoped to {@code userId}: a user can only ever see
+ * or change their own posts.
+ */
 @Service
 public class PostService {
 
+    private static final Logger log = LoggerFactory.getLogger(PostService.class);
+    static final List<String> PLATFORM_KEYS = List.of("devto", "hashnode", "twitter", "linkedin", "medium");
+
     private final PostRepository postRepository;
-    private final PostVersionRepository postVersionRepository;
-    private final PostMapper postMapper;
+    private final VersionService versionService;
+    private final PlatformPublishService publishService;
+    private final MongoTemplate mongoTemplate;
     private final List<PlatformFormatter> formatters;
-    private final List<PlatformPublisher> publishers;
-    private final Parser markdownParser;
     private final PlatformCredentialsProvider credentialsProvider;
-    private final com.echo.repository.PlatformCredentialRepository credentialRepository;
-    private final com.echo.security.EncryptionService encryptionService;
+    private final PlatformCredentialRepository credentialRepository;
+    private final EncryptionService encryptionService;
+    private final Parser markdownParser = Parser.builder().build();
 
     public PostService(PostRepository postRepository,
-                       PostVersionRepository postVersionRepository,
-                       PostMapper postMapper,
+                       VersionService versionService,
+                       PlatformPublishService publishService,
+                       MongoTemplate mongoTemplate,
                        List<PlatformFormatter> formatters,
-                       List<PlatformPublisher> publishers,
                        PlatformCredentialsProvider credentialsProvider,
-                       com.echo.repository.PlatformCredentialRepository credentialRepository,
-                       com.echo.security.EncryptionService encryptionService) {
+                       PlatformCredentialRepository credentialRepository,
+                       EncryptionService encryptionService) {
         this.postRepository = postRepository;
-        this.postVersionRepository = postVersionRepository;
-        this.postMapper = postMapper;
+        this.versionService = versionService;
+        this.publishService = publishService;
+        this.mongoTemplate = mongoTemplate;
         this.formatters = formatters;
-        this.publishers = publishers;
         this.credentialsProvider = credentialsProvider;
         this.credentialRepository = credentialRepository;
         this.encryptionService = encryptionService;
-        this.markdownParser = Parser.builder().build();
     }
 
-    public List<PostResponse> getAllPosts() {
-        return postRepository.findAll().stream()
-                .map(PostResponse::from)
-                .toList();
+    // ── Reads ────────────────────────────────────────────────────────────────
+
+    public List<PostResponse> getAllPosts(String userId) {
+        return postRepository.findByUserIdOrderByUpdatedAtDesc(userId).stream().map(PostResponse::from).toList();
     }
 
-    public PostResponse getPost(String id) {
-        return postRepository.findById(id)
-                .map(PostResponse::from)
-                .orElseThrow(() -> new ResourceNotFoundException("Post", id));
+    public PostResponse getPost(String userId, String id) {
+        return PostResponse.from(owned(userId, id));
     }
 
-    public PostResponse createPost(PostCreateRequest request) {
-        Post post = postMapper.toEntity(request);
-        post = postRepository.save(post);
-        return PostResponse.from(post);
+    // ── Create / autosave / delete ───────────────────────────────────────────
+
+    public PostResponse createPost(String userId, PostCreateRequest request) {
+        LocalDateTime now = LocalDateTime.now();
+        Map<String, PlatformStatus> platforms = new LinkedHashMap<>();
+        for (String key : PLATFORM_KEYS) {
+            platforms.put(key, new PlatformStatus(PlatformPublishStatus.NOT_STARTED, null, null, null, null, null));
+        }
+        Post post = Post.builder()
+                .userId(userId)
+                .title(request.getTitle())
+                .bodyMarkdown(request.getBodyMarkdown() != null ? request.getBodyMarkdown() : "")
+                .structuredContent(request.getStructuredContent())
+                .tags(request.getTags() != null ? request.getTags() : List.of())
+                .coverImageUrl(request.getCoverImageUrl())
+                .sourceUrl(request.getSourceUrl())
+                .status("DRAFT")
+                .createdAt(now).updatedAt(now).lastAutosavedAt(now)
+                .platforms(platforms)
+                .build();
+        return PostResponse.from(postRepository.save(post));
     }
 
-    public PostResponse autosave(String id, PostAutosaveRequest request) {
-        Post existing = postRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Post", id));
-        
-        Post updated = new Post(
-                existing.id(),
-                request.title() != null ? request.title() : existing.title(),
-                request.bodyMarkdown(),
-                request.structuredContent() != null ? request.structuredContent() : existing.structuredContent(),
-                existing.tags(),
-                request.coverImageUrl() != null ? request.coverImageUrl() : existing.coverImageUrl(),
-                existing.status(),
-                existing.sourceUrl(),
-                existing.createdAt(),
-                LocalDateTime.now(),
-                LocalDateTime.now(),
-                existing.platforms(),
-                existing.scheduledAt(),
-                request.platformOverrides() != null ? request.platformOverrides() : existing.platformOverrides(),
-                request.metaDescription() != null ? request.metaDescription() : existing.metaDescription(),
-                request.canonicalUrl() != null ? request.canonicalUrl() : existing.canonicalUrl(),
-                request.seoImageUrl() != null ? request.seoImageUrl() : existing.seoImageUrl()
-        );
-        
-        Post saved = postRepository.save(updated);
-        saveVersion(saved.id(), request.bodyMarkdown());
-        
+    /**
+     * Updates the working copy with targeted {@code $set}s (so a concurrent platform-status update is
+     * never overwritten) and takes a checkpoint when warranted.
+     */
+    public PostResponse autosave(String userId, String id, PostAutosaveRequest request) {
+        owned(userId, id);
+        LocalDateTime now = LocalDateTime.now();
+        Update update = new Update()
+                .set("bodyMarkdown", request.bodyMarkdown())
+                .set("updatedAt", now)
+                .set("lastAutosavedAt", now);
+        if (request.title() != null) update.set("title", request.title());
+        if (request.structuredContent() != null) update.set("structuredContent", request.structuredContent());
+        if (request.tags() != null) update.set("tags", request.tags());
+        if (request.platformOverrides() != null) update.set("platformOverrides", request.platformOverrides());
+        setOrClear(update, "coverImageUrl", request.coverImageUrl());
+        setOrClear(update, "metaDescription", request.metaDescription());
+        setOrClear(update, "canonicalUrl", request.canonicalUrl());
+        setOrClear(update, "seoImageUrl", request.seoImageUrl());
+        mongoTemplate.updateFirst(Query.query(Criteria.where("_id").is(id).and("userId").is(userId)), update, Post.class);
+
+        Post saved = owned(userId, id);
+        versionService.checkpoint(saved, Reason.AUTO, null);
         return PostResponse.from(saved);
     }
 
-    private void saveVersion(String postId, String bodyMarkdown) {
-        PostVersion version = new PostVersion(null, postId, bodyMarkdown, LocalDateTime.now());
-        postVersionRepository.save(version);
-        
-        // Keep only last 20 versions
-        List<PostVersion> versions = postVersionRepository.findAllByPostIdOrderBySavedAtDesc(postId);
-        if (versions.size() > 20) {
-            List<String> toDelete = versions.subList(20, versions.size()).stream()
-                    .map(PostVersion::id)
-                    .toList();
-            postVersionRepository.deleteAllById(toDelete);
-        }
+    private static void setOrClear(Update update, String field, String value) {
+        if (value == null) return;
+        if (value.isBlank()) update.unset(field);
+        else update.set(field, value);
     }
 
-    public List<PostVersion> getVersions(String postId) {
-        return postVersionRepository.findAllByPostIdOrderBySavedAtDesc(postId);
+    public void deletePost(String userId, String id) {
+        Post post = owned(userId, id);
+        postRepository.deleteById(post.id());
+        versionService.deleteAllFor(post.id());
     }
 
-    public PreviewResponse preview(String postId) {
-        Post post = postRepository.findById(postId)
-                .orElseThrow(() -> new ResourceNotFoundException("Post", postId));
-        
-        Node ast = markdownParser.parse(post.bodyMarkdown());
-        ParsedPost parsedPost = new ParsedPost(
-                post.title(),
-                ast,
-                post.tags(),
-                post.coverImageUrl()
-        );
-        
+    // ── Versions ─────────────────────────────────────────────────────────────
+
+    public List<VersionSummary> getVersions(String userId, String postId) {
+        owned(userId, postId);
+        return versionService.list(postId);
+    }
+
+    public PostVersion getVersion(String userId, String postId, String versionId) {
+        owned(userId, postId);
+        return versionService.get(postId, versionId);
+    }
+
+    public PostVersion saveNamedVersion(String userId, String postId, String label) {
+        Post post = owned(userId, postId);
+        return versionService.checkpoint(post, Reason.MANUAL, label == null || label.isBlank() ? null : label.strip())
+                .orElseThrow(() -> new IllegalStateException("Could not create version"));
+    }
+
+    public PostVersion updateVersion(String userId, String postId, String versionId, String label, Boolean pinned) {
+        owned(userId, postId);
+        return versionService.update(postId, versionId, label, pinned);
+    }
+
+    /** Checkpoints the current state ("Before restore"), then makes the old version the working copy. */
+    public PostResponse restoreVersion(String userId, String postId, String versionId) {
+        Post post = owned(userId, postId);
+        PostVersion v = versionService.get(postId, versionId);
+        versionService.checkpoint(post, Reason.PRE_RESTORE, "Before restore");
+        LocalDateTime now = LocalDateTime.now();
+        Update update = new Update().set("bodyMarkdown", v.bodyMarkdown() == null ? "" : v.bodyMarkdown())
+                .set("updatedAt", now).set("lastAutosavedAt", now);
+        if (v.structuredContent() != null) update.set("structuredContent", v.structuredContent());
+        else update.unset("structuredContent");
+        mongoTemplate.updateFirst(Query.query(Criteria.where("_id").is(postId)), update, Post.class);
+        return PostResponse.from(owned(userId, postId));
+    }
+
+    /** Called before the AI replaces text, so the user can always get the original back. */
+    public void checkpointBeforeAi(String userId, String postId) {
+        versionService.checkpoint(owned(userId, postId), Reason.PRE_AI, "Before AI edit");
+    }
+
+    // ── Preview ──────────────────────────────────────────────────────────────
+
+    public PreviewResponse preview(String userId, String postId) {
+        Post post = owned(userId, postId);
+        ParsedPost parsed = parsed(post, post.bodyMarkdown());
         Map<String, FormattedContent> previews = formatters.stream()
-                .collect(Collectors.toMap(
-                        PlatformFormatter::platformKey,
-                        formatter -> formatter.format(parsedPost)
-                ));
-        
+                .collect(Collectors.toMap(PlatformFormatter::platformKey, f -> f.format(parsed)));
         return PreviewResponse.from(previews);
     }
 
-    public void publish(String postId, PublishRequest request) {
-        Post post = postRepository.findById(postId)
-                .orElseThrow(() -> new ResourceNotFoundException("Post", postId));
-        
-        if (request.scheduledAt() != null && request.scheduledAt().isAfter(LocalDateTime.now())) {
-            Post scheduledPost = new Post(
-                post.id(),
-                post.title(),
-                post.bodyMarkdown(),
-                post.structuredContent(),
-                post.tags(),
-                post.coverImageUrl(),
-                "SCHEDULED",
-                post.sourceUrl(),
-                post.createdAt(),
-                LocalDateTime.now(),
-                post.lastAutosavedAt(),
-                post.platforms(),
-                request.scheduledAt(),
-                request.platformOverrides() != null ? request.platformOverrides() : post.platformOverrides(),
-                post.metaDescription(),
-                post.canonicalUrl(),
-                post.seoImageUrl()
-            );
-            postRepository.save(scheduledPost);
+    // ── Publish / schedule ───────────────────────────────────────────────────
+
+    public void publish(String userId, String postId, PublishRequest request) {
+        Post post = owned(userId, postId);
+        Set<String> targets = request.platforms();
+        if (targets == null || targets.isEmpty()) {
+            throw new IllegalArgumentException("Select at least one platform");
+        }
+        for (String key : targets) {
+            if (!publishService.isSupported(key)) {
+                throw new IllegalArgumentException("Publishing to '" + key + "' is not supported");
+            }
+        }
+        LocalDateTime now = LocalDateTime.now();
+
+        if (request.scheduledAt() != null && request.scheduledAt().isAfter(now)) {
+            Update update = new Update().set("status", "SCHEDULED").set("scheduledAt", request.scheduledAt())
+                    .set("scheduledPlatforms", targets).set("updatedAt", now);
+            if (request.platformOverrides() != null) update.set("platformOverrides", request.platformOverrides());
+            mongoTemplate.updateFirst(Query.query(Criteria.where("_id").is(postId)), update, Post.class);
+            versionService.checkpoint(post, Reason.SCHEDULE, "Scheduled");
             return;
         }
 
-        post = new Post(
-            post.id(),
-            post.title(),
-            post.bodyMarkdown(),
-            post.structuredContent(),
-            post.tags(),
-            post.coverImageUrl(),
-            "PUBLISHED",
-            post.sourceUrl(),
-            post.createdAt(),
-            LocalDateTime.now(),
-            post.lastAutosavedAt(),
-            post.platforms(),
-            post.scheduledAt(),
-            request.platformOverrides() != null ? request.platformOverrides() : post.platformOverrides(),
-            post.metaDescription(),
-            post.canonicalUrl(),
-            post.seoImageUrl()
-        );
-        post = postRepository.save(post);
+        versionService.checkpoint(post, Reason.PUBLISH, "Published");
+        Update update = new Update().set("status", "PUBLISHED").unset("scheduledAt").unset("scheduledPlatforms")
+                .set("updatedAt", now);
+        if (request.platformOverrides() != null) update.set("platformOverrides", request.platformOverrides());
+        mongoTemplate.updateFirst(Query.query(Criteria.where("_id").is(postId)), update, Post.class);
 
-        Node ast = markdownParser.parse(post.bodyMarkdown());
-        ParsedPost parsedPost = new ParsedPost(
-                post.title(),
-                ast,
-                post.tags(),
-                post.coverImageUrl()
-        );
-        
-        String userId = null;
-        if (org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication() != null) {
-            Object principal = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-            if (principal instanceof String) {
-                userId = (String) principal;
-            }
+        Post fresh = owned(userId, postId);
+        dispatch(fresh, targets, request.credentials());
+    }
+
+    /** Cancels a scheduled post and returns it to drafts. */
+    public PostResponse unschedule(String userId, String postId) {
+        Post post = owned(userId, postId);
+        if (!"SCHEDULED".equals(post.status())) return PostResponse.from(post);
+        mongoTemplate.updateFirst(
+                Query.query(Criteria.where("_id").is(postId).and("status").is("SCHEDULED")),
+                new Update().set("status", "DRAFT").unset("scheduledAt").unset("scheduledPlatforms")
+                        .set("updatedAt", LocalDateTime.now()), Post.class);
+        return PostResponse.from(owned(userId, postId));
+    }
+
+    /** Invoked by the scheduler. Atomically claims the post first so two instances cannot both publish it. */
+    public void publishScheduled(Post post) {
+        long claimed = mongoTemplate.updateFirst(
+                Query.query(Criteria.where("_id").is(post.id()).and("status").is("SCHEDULED")),
+                new Update().set("status", "PUBLISHED").set("updatedAt", LocalDateTime.now()),
+                Post.class).getModifiedCount();
+        if (claimed == 0) return; // someone else got it, or it was unscheduled meanwhile
+
+        Set<String> targets = post.scheduledPlatforms();
+        if (targets == null || targets.isEmpty()) {
+            // Legacy scheduled posts (before platforms were stored): only publish to connected platforms.
+            targets = PLATFORM_KEYS.stream()
+                    .filter(k -> credentialRepository.findByUserIdAndPlatform(post.userId(), k)
+                            .map(c -> c.connected()).orElse(false))
+                    .collect(Collectors.toSet());
         }
-        
-        for (String platformKey : request.platforms()) {
-            // Check if already published (idempotency)
-            PlatformStatus existingStatus = post.platforms().get(platformKey);
-            if (existingStatus != null && 
-                (existingStatus.status() == PlatformStatus.PlatformPublishStatus.PUBLISHED || 
-                 existingStatus.status() == PlatformStatus.PlatformPublishStatus.PENDING)) {
-                continue; // Skip already published or pending
+        versionService.checkpoint(post, Reason.PUBLISH, "Published (scheduled)");
+        dispatch(post, targets, null);
+    }
+
+    private void dispatch(Post post, Set<String> targets, Map<String, com.echo.dto.PlatformCredentialsDto> overrides) {
+        for (String platformKey : targets) {
+            PlatformStatus existing = post.platforms() == null ? null : post.platforms().get(platformKey);
+            if (existing != null && (existing.status() == PlatformPublishStatus.PUBLISHED
+                    || existing.status() == PlatformPublishStatus.PENDING)) {
+                continue; // idempotent: already done or in flight
             }
-            
-            PlatformCredentials creds = null;
-            if (request.credentials() != null && request.credentials().containsKey(platformKey)) {
-                creds = credentialsProvider.getCredentials(platformKey, request.credentials());
-            } else if (userId != null) {
-                var stored = credentialRepository.findByUserIdAndPlatform(userId, platformKey).orElse(null);
-                if (stored != null) {
-                    creds = new PlatformCredentials(
+            PlatformCredentials creds = resolveCredentials(post.userId(), platformKey, overrides);
+            String body = post.platformOverrides() != null && post.platformOverrides().containsKey(platformKey)
+                    ? post.platformOverrides().get(platformKey) : post.bodyMarkdown();
+            publishService.markPending(post.id(), platformKey);
+            publishService.publish(post.id(), platformKey, parsed(post, body), creds);
+        }
+    }
+
+    PlatformCredentials resolveCredentials(String userId, String platformKey,
+                                           Map<String, com.echo.dto.PlatformCredentialsDto> overrides) {
+        if (overrides != null && overrides.containsKey(platformKey)) {
+            return credentialsProvider.getCredentials(platformKey, overrides);
+        }
+        if (userId != null) {
+            var stored = credentialRepository.findByUserIdAndPlatform(userId, platformKey).orElse(null);
+            if (stored != null) {
+                return new PlatformCredentials(
                         encryptionService.decrypt(stored.encryptedApiKey()),
                         encryptionService.decrypt(stored.encryptedAccessToken()),
                         encryptionService.decrypt(stored.encryptedRefreshToken()),
                         encryptionService.decrypt(stored.encryptedClientId()),
-                        encryptionService.decrypt(stored.encryptedClientSecret())
-                    );
-                }
+                        encryptionService.decrypt(stored.encryptedClientSecret()));
             }
-            
-            if (creds == null) {
-                creds = credentialsProvider.getCredentials(platformKey, request.credentials());
-            }
-            // Parse specific body if override exists
-            String bodyToParse = (post.platformOverrides() != null && post.platformOverrides().containsKey(platformKey)) 
-                ? post.platformOverrides().get(platformKey) 
-                : post.bodyMarkdown();
-                
-            Node platformAst = markdownParser.parse(bodyToParse);
-            ParsedPost platformParsedPost = new ParsedPost(
-                    post.title(),
-                    platformAst,
-                    post.tags(),
-                    post.coverImageUrl()
-            );
-            
-            // Publish asynchronously
-            publishToPlatformAsync(postId, platformKey, platformParsedPost, creds);
         }
+        return credentialsProvider.getCredentials(platformKey, null);
     }
 
-    public void publishScheduled(Post post) {
-        Node ast = markdownParser.parse(post.bodyMarkdown());
-        ParsedPost parsedPost = new ParsedPost(
-                post.title(),
-                ast,
-                post.tags(),
-                post.coverImageUrl()
-        );
+    // ── helpers ──────────────────────────────────────────────────────────────
 
-        for (String platformKey : post.platforms().keySet()) {
-            PlatformStatus existingStatus = post.platforms().get(platformKey);
-            if (existingStatus != null && 
-                (existingStatus.status() == PlatformStatus.PlatformPublishStatus.PUBLISHED || 
-                 existingStatus.status() == PlatformStatus.PlatformPublishStatus.PENDING)) {
-                continue; 
-            }
-
-            PlatformCredentials creds = credentialsProvider.getCredentials(platformKey, null);
-            
-            // Parse specific body if override exists
-            String bodyToParse = (post.platformOverrides() != null && post.platformOverrides().containsKey(platformKey)) 
-                ? post.platformOverrides().get(platformKey) 
-                : post.bodyMarkdown();
-                
-            Node platformAst = markdownParser.parse(bodyToParse);
-            ParsedPost platformParsedPost = new ParsedPost(
-                    post.title(),
-                    platformAst,
-                    post.tags(),
-                    post.coverImageUrl()
-            );
-            
-            publishToPlatformAsync(post.id(), platformKey, platformParsedPost, creds);
-        }
-
-        // update the post status to 'PUBLISHED'
-        Post updatedPost = new Post(
-            post.id(),
-            post.title(),
-            post.bodyMarkdown(),
-            post.structuredContent(),
-            post.tags(),
-            post.coverImageUrl(),
-            "PUBLISHED",
-            post.sourceUrl(),
-            post.createdAt(),
-            LocalDateTime.now(),
-            post.lastAutosavedAt(),
-            post.platforms(),
-            post.scheduledAt(),
-            post.platformOverrides(),
-            post.metaDescription(),
-            post.canonicalUrl(),
-            post.seoImageUrl()
-        );
-        postRepository.save(updatedPost);
+    private ParsedPost parsed(Post post, String markdown) {
+        Node ast = markdownParser.parse(markdown == null ? "" : markdown);
+        return new ParsedPost(post.title(), ast, post.tags(), post.coverImageUrl());
     }
 
-    @Async
-    @Retryable(maxAttempts = 3, backoff = @Backoff(delay = 2000, multiplier = 2))
-    public void publishToPlatformAsync(String postId, String platformKey, ParsedPost parsedPost, PlatformCredentials creds) {
-        PlatformFormatter formatter = formatters.stream()
-                .filter(f -> f.platformKey().equals(platformKey))
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException("No formatter for platform: " + platformKey));
-        
-        PlatformPublisher publisher = publishers.stream()
-                .filter(p -> p.platformKey().equals(platformKey))
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException("No publisher for platform: " + platformKey));
-        
-        // Update status to PENDING
-        updatePlatformStatus(postId, platformKey, PlatformStatus.PlatformPublishStatus.PENDING, null, null, null, null);
-        
-        try {
-            FormattedContent formattedContent = formatter.format(parsedPost);
-            PublishResult result = publisher.publish(formattedContent, creds);
-            
-            updatePlatformStatus(
-                    postId, 
-                    platformKey, 
-                    result.success() ? PlatformStatus.PlatformPublishStatus.PUBLISHED : PlatformStatus.PlatformPublishStatus.FAILED,
-                    result.url(),
-                    result.platformId(),
-                    result.error(),
-                    result.threadIds()
-            );
-        } catch (Exception e) {
-            updatePlatformStatus(
-                    postId, 
-                    platformKey, 
-                    PlatformStatus.PlatformPublishStatus.FAILED,
-                    null,
-                    null,
-                    e.getMessage(),
-                    null
-            );
-        }
-    }
-
-    private void updatePlatformStatus(String postId, String platformKey, 
-                                      PlatformStatus.PlatformPublishStatus status,
-                                      String url, String platformId, String error, 
-                                      List<String> threadIds) {
-        Post post = postRepository.findById(postId)
-                .orElseThrow(() -> new ResourceNotFoundException("Post", postId));
-        
-        Map<String, PlatformStatus> platforms = new java.util.HashMap<>(post.platforms());
-        PlatformStatus existing = platforms.get(platformKey);
-        
-        PlatformStatus updated = new PlatformStatus(
-                status,
-                url,
-                platformId,
-                status == PlatformStatus.PlatformPublishStatus.PUBLISHED ? LocalDateTime.now() : (existing != null ? existing.publishedAt() : null),
-                error,
-                threadIds
-        );
-        
-        platforms.put(platformKey, updated);
-        
-        Post updatedPost = new Post(
-                post.id(),
-                post.title(),
-                post.bodyMarkdown(),
-                post.structuredContent(),
-                post.tags(),
-                post.coverImageUrl(),
-                post.status(),
-                post.sourceUrl(),
-                post.createdAt(),
-                LocalDateTime.now(),
-                post.lastAutosavedAt(),
-                platforms,
-                post.scheduledAt(),
-                post.platformOverrides(),
-                post.metaDescription(),
-                post.canonicalUrl(),
-                post.seoImageUrl()
-        );
-        
-        postRepository.save(updatedPost);
+    private Post owned(String userId, String id) {
+        return postRepository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Post", id));
     }
 }

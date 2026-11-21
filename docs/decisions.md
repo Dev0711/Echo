@@ -219,3 +219,33 @@
 - More boilerplate than Context
 
 **Date**: 2026-09-02
+
+## 10. Version History as Checkpoints
+
+**Decision**: Store checkpoints (deduplicated by content hash, throttled to one AUTO per 2 minutes) with tiered retention and pinned versions, instead of a snapshot on every autosave capped at 20.
+
+**Why**:
+
+- A cap of 20 per-second snapshots covered only a few minutes of editing
+- The original cleanup query had no sort, so it deleted the newest versions instead of the oldest
+- Pruning in the request path loaded every full body; the new policy works on ids and timestamps only
+- Important moments (publish, AI edit, restore) must never be thinned away, so they are pinned
+
+**Alternatives Considered**:
+
+- Delta/patch storage (smaller, but restore needs replaying; text is small, so full snapshots are fine)
+- Event-sourced editing (overkill for single-author posts)
+
+**Tradeoffs**:
+
+- Up to two minutes of typing can sit between the last checkpoint and "now" (the working copy itself is always current)
+
+**Date**: 2026-11-21
+
+## 11. Authenticated, Per-User API
+
+**Decision**: Require a JWT for the entire API and scope all post data to its owner.
+
+**Why**: The API was public ("for development"), posts had no owner, and anyone could read, publish or burn AI quota. Posts created before this change have no `userId` and are not visible; assign them in MongoDB if you need them (`db.posts.updateMany({userId: {$exists:false}}, {$set:{userId:"<user id>"}})`).
+
+**Date**: 2026-11-21

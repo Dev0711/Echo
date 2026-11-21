@@ -1,5 +1,5 @@
 // Add credential types to the existing types file
-export type PostStatus = 'DRAFT' | 'READY' | 'PUBLISHED' | 'SCHEDULED';
+export type PostStatus = 'DRAFT' | 'READY' | 'PUBLISHED' | 'SCHEDULED' | 'FAILED';
 
 export type PlatformPublishStatus =
   | 'NOT_STARTED'
@@ -31,6 +31,7 @@ export interface Post {
   lastAutosavedAt: string;
   platforms: Record<string, PlatformStatus>;
   scheduledAt?: string;
+  scheduledPlatforms?: string[];
   platformOverrides?: Record<string, string>;
   metaDescription?: string;
   canonicalUrl?: string;
@@ -50,6 +51,7 @@ export interface PostAutosaveRequest {
   title?: string;
   bodyMarkdown: string;
   structuredContent?: string;
+  tags?: string[];
   platformOverrides?: Record<string, string>;
   coverImageUrl?: string | null;
   metaDescription?: string;
@@ -109,4 +111,35 @@ export interface SaveCredentialRequest {
   refreshToken?: string;
   clientId?: string;
   clientSecret?: string;
+}
+
+// ─── Version history ─────────────────────────────────────────────────────────
+export type VersionReason = 'AUTO' | 'MANUAL' | 'PUBLISH' | 'SCHEDULE' | 'PRE_AI' | 'PRE_RESTORE';
+
+export interface VersionSummary {
+  id: string;
+  title?: string | null;
+  reason: VersionReason;
+  label?: string | null;
+  pinned: boolean;
+  wordCount: number;
+  savedAt: string;
+  preview: string;
+}
+
+export interface VersionDetail extends Omit<VersionSummary, 'preview'> {
+  postId: string;
+  bodyMarkdown: string;
+  structuredContent?: string | null;
+}
+
+// ─── AI ──────────────────────────────────────────────────────────────────────
+export type AiAction =
+  | 'fix_grammar' | 'improve_intro' | 'change_tone' | 'shorten' | 'expand'
+  | 'suggest_titles' | 'suggest_tags' | 'summarize' | 'meta_description' | 'social_posts';
+
+export interface AiAssistResponse {
+  result?: string | null;
+  items?: string[] | null;
+  sections?: Record<string, string> | null;
 }

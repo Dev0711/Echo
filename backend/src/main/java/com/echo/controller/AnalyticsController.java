@@ -4,6 +4,7 @@ import com.echo.dto.AnalyticsSummaryResponse;
 import com.echo.model.Post;
 import com.echo.model.PlatformStatus;
 import com.echo.repository.PostRepository;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,8 +26,8 @@ public class AnalyticsController {
     }
 
     @GetMapping("/summary")
-    public AnalyticsSummaryResponse getSummary() {
-        List<Post> posts = postRepository.findAll();
+    public AnalyticsSummaryResponse getSummary(Authentication auth) {
+        List<Post> posts = postRepository.findByUserIdOrderByUpdatedAtDesc((String) auth.getPrincipal());
 
         int totalPosts = posts.size();
         int draftPosts = 0;

@@ -23,12 +23,17 @@ export interface EditorHandle {
   appendMarkdown: (text: string) => void;
   replaceMarkdown: (text: string) => void;
   getSelection: () => EditorSelection | null;
+  getMarkdown: () => string;
   replaceRange: (from: number, to: number, text: string) => Promise<void>;
 }
+
+/** Everything besides body/title that autosave persists; used to detect changes. */
+const metaKeyOf = (p: Post) => JSON.stringify([p.tags || [], p.coverImageUrl || '', p.metaDescription || '', p.canonicalUrl || '', p.seoImageUrl || '', p.platformOverrides || {}]);
 
 export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ post, onTitleChange, onStatusChange }: EditorProps, ref) {
   const [markdown, setMarkdown] = useState('');
   const [structuredContent, setStructuredContent] = useState('');
+  const [loadedPostId, setLoadedPostId] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -41,7 +46,11 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ po
   const lastAutosavedTitleRef = useRef('');
   const isMountedRef = useRef(true);
   const blockEditorRef = useRef<BlockEditorHandle>(null);
+  const markdownRef = useRef('');
+  const lastAutosavedMetaRef = useRef('');
   const { updatePost } = usePostStore();
+
+  markdownRef.current = markdown;
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -66,6 +75,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ po
     getSelection: () => {
       return blockEditorRef.current?.getSelection() ?? null;
     },
+    getMarkdown: () => markdownRef.current,
     replaceRange: (from: number, to: number, text: string) => {
       const handle = blockEditorRef.current;
       if (!handle) return Promise.resolve();
@@ -98,22 +108,27 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ po
       setStructuredContent(scContent || '');
       lastAutosavedContentRef.current = scContent || mdContent || '';
       lastAutosavedTitleRef.current = post.title || '';
+      lastAutosavedMetaRef.current = metaKeyOf(post);
+      setLoadedPostId(post.id);
     }
   }, [post?.id]);
 
   const triggerAutosave = useCallback(() => {
     if (!post || !isDirty) return;
     setIsSaving(true);
-    const request: PostAutosaveRequest = { 
+    // Empty string tells the server to clear a field; null would mean "leave unchanged".
+    const request: PostAutosaveRequest = {
       title: post.title,
       bodyMarkdown: markdown,
       structuredContent: structuredContent,
+      tags: post.tags || [],
       platformOverrides: post.platformOverrides,
-      coverImageUrl: post.coverImageUrl,
-      metaDescription: post.metaDescription,
-      canonicalUrl: post.canonicalUrl,
-      seoImageUrl: post.seoImageUrl,
+      coverImageUrl: post.coverImageUrl ?? '',
+      metaDescription: post.metaDescription ?? '',
+      canonicalUrl: post.canonicalUrl ?? '',
+      seoImageUrl: post.seoImageUrl ?? '',
     };
+    const savedMetaKey = metaKeyOf(post);
     postsApi.autosave(post.id, request)
       .then(() => {
         updatePost(post.id, {
@@ -130,10 +145,11 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ po
         }
         lastAutosavedContentRef.current = structuredContent || markdown;
         lastAutosavedTitleRef.current = post.title;
+        lastAutosavedMetaRef.current = savedMetaKey;
       })
       .catch((error) => {
         if (isMountedRef.current) {
-          setSaveError(error.response?.data?.message || 'Autosave failed');
+          setSaveError(error.response?.data?.message || 'Couldn’t save — we’ll retry when you keep typing');
         }
       })
       .finally(() => {
@@ -147,7 +163,8 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ po
     const hasContentChanged = currentContent !== lastAutosavedContentRef.current;
     const hasTitleChanged = post.title !== lastAutosavedTitleRef.current;
     
-    const hasChanged = hasContentChanged || hasTitleChanged;
+    const hasMetaChanged = metaKeyOf(post) !== lastAutosavedMetaRef.current;
+    const hasChanged = hasContentChanged || hasTitleChanged || hasMetaChanged;
     setIsDirty(hasChanged);
     if (hasChanged) {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
@@ -251,7 +268,8 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ po
 
         {/* Block Editor */}
         <div className="px-8 py-4">
-          <BlockEditor
+          {post && loadedPostId === post.id ? <BlockEditor
+            key={post.id}
             editorRef={blockEditorRef}
             structuredContent={structuredContent}
             markdownContent={markdown}
@@ -259,7 +277,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ po
               setStructuredContent(astJson);
               setMarkdown(mdOut);
             }}
-          />
+          /> : <div className="h-32 flex items-center justify-center text-[#71717a] text-[13px]">Loading editor…</div>}
         </div>
 
         {/* SEO Panel */}
