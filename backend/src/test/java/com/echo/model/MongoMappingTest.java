@@ -110,6 +110,21 @@ class MongoMappingTest {
         PostVersion back = converter.read(PostVersion.class, doc);
         assertEquals(v.savedAt(), back.savedAt());
         assertEquals(PostVersion.Reason.MANUAL, back.reason());
-        assertTrue(back.pinned());
+        assertTrue(back.pinnedFlag());
+    }
+
+    /** Version documents written before the checkpoint schema existed must still load. */
+    @Test
+    void legacyVersionDocumentsStillLoad() {
+        Document legacy = new Document("_id", new org.bson.types.ObjectId())
+                .append("postId", "p1")
+                .append("bodyMarkdown", "old text")
+                .append("savedAt", new java.util.Date())
+                .append("_class", "com.echo.model.PostVersion");
+        PostVersion v = converter.read(PostVersion.class, legacy);
+        assertEquals("old text", v.bodyMarkdown());
+        assertFalse(v.pinnedFlag());
+        assertEquals(0, v.words());
+        assertNull(v.reason());
     }
 }
